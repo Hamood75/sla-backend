@@ -4,6 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from accounts.views import DepartmentViewSet, MeView, OrganizationViewSet, RegisterView, UserViewSet
 from cms.views import (
@@ -75,6 +76,8 @@ urlpatterns = [
     path('api/cms/donate-copy/', DonateModalCopyView.as_view(), name='donate-copy'),
     path('api/dashboard/stats/', DashboardStatsAPIView.as_view(), name='dashboard-stats'),
     path('api/analytics/platform/', PlatformAnalyticsAPIView.as_view(), name='platform-analytics'),
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/', include(router.urls)),
 ]
 

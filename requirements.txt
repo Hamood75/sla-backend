@@ -8,3 +8,4 @@ django-filter>=24.0
 python-decouple>=3.8
 gunicorn>=22.0
 user-agents>=2.2
+drf-spectacular>=0.27
