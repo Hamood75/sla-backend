@@ -3,7 +3,7 @@
 
 .PHONY: help build up up-logs down logs shell shell-db migrate migrations seed superuser test static clean deploy release push
 
-COMPOSE = docker compose
+COMPOSE = docker-compose
 APP = web
 DB = db
 IMAGE ?= streetlabsafrica/sla-backend:latest

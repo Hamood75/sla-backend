@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile
     container_name: sla-backend
     ports:
-      - "8000:8000"
+      - "9201:8000"
     environment:
       - DEBUG=True
       - SECRET_KEY=django-insecure-dev-only-change-me
