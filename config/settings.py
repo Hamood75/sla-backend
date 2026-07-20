@@ -97,10 +97,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'accounts.User'
 
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173,http://127.0.0.1:5173',
-    cast=Csv(),
+CORS_ALLOWED_ORIGINS = tuple(
+    dict.fromkeys(
+        (*config(
+            'CORS_ALLOWED_ORIGINS',
+            default='http://localhost:5173,http://127.0.0.1:5173',
+            cast=Csv(),
+        ), 'https://streetlabsafrica.org', 'https://www.streetlabsafrica.org')
+    )
 )
 CORS_ALLOW_CREDENTIALS = True
 
