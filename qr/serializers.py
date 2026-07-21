@@ -4,6 +4,8 @@ from .models import QRCode, QRCodeAnalytics, QRCodeLink
 
 
 class QRCodeLinkSerializer(serializers.ModelSerializer):
+    url = serializers.CharField(max_length=500)
+
     class Meta:
         model = QRCodeLink
         fields = ['id', 'label', 'icon', 'url', 'order', 'is_active', 'click_count']

@@ -260,7 +260,6 @@ class Command(BaseCommand):
                 'phone': '+255700000001',
                 'website': 'https://streetlabsafrica.org',
                 'location': 'Morogoro, Tanzania',
-                'meeting_url': 'https://calendly.com/',
                 'department': innovation,
             },
         )

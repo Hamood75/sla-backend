@@ -1,12 +1,10 @@
 import hashlib
-from io import BytesIO
 
-import qrcode
 from django.conf import settings
-from qrcode.image.svg import SvgPathImage
 from user_agents import parse as parse_ua
 
 from .models import QRCodeAnalytics
+from .rendering import render_branded_qr_png, render_branded_qr_svg
 
 
 def hash_ip(ip: str) -> str:
@@ -64,41 +62,11 @@ def record_scan(qr, request, link_clicked=None):
 
 
 def build_qr_image(qr, fmt='png'):
-    """Generate PNG bytes or SVG XML for a QR code pointing at its public URL."""
+    """Generate branded PNG/SVG for a QR code pointing at its public URL."""
     url = qr.public_url
-    # Prefer frontend local URL in development for testing
     if getattr(settings, 'DEBUG', False) and getattr(settings, 'FRONTEND_URL', None):
         url = f"{settings.FRONTEND_URL.rstrip('/')}{qr.public_path}"
 
     if fmt == 'svg':
-        img = qrcode.make(url, image_factory=SvgPathImage)
-        buffer = BytesIO()
-        img.save(buffer)
-        return buffer.getvalue(), 'image/svg+xml'
-
-    qr_obj = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=10,
-        border=2,
-    )
-    qr_obj.add_data(url)
-    qr_obj.make(fit=True)
-    img = qr_obj.make_image(fill_color=qr.secondary_color or '#0a1f44', back_color=qr.background_color or 'white')
-
-    if qr.show_logo and qr.logo:
-        try:
-            from PIL import Image
-            logo = Image.open(qr.logo.path).convert('RGBA')
-            qr_w, qr_h = img.size
-            logo_size = qr_w // 4
-            logo = logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
-            pos = ((qr_w - logo_size) // 2, (qr_h - logo_size) // 2)
-            img = img.convert('RGBA')
-            img.paste(logo, pos, logo)
-        except Exception:
-            pass
-
-    buffer = BytesIO()
-    img.convert('RGB').save(buffer, format='PNG')
-    return buffer.getvalue(), 'image/png'
+        return render_branded_qr_svg(url, qr), 'image/svg+xml'
+    return render_branded_qr_png(url, qr), 'image/png'

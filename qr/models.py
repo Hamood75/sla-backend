@@ -146,7 +146,7 @@ class QRCodeLink(models.Model):
     qr = models.ForeignKey(QRCode, on_delete=models.CASCADE, related_name='links')
     label = models.CharField(max_length=120)
     icon = models.CharField(max_length=40, choices=Icon.choices, default=Icon.CUSTOM)
-    url = models.URLField()
+    url = models.CharField(max_length=500)
     order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     click_count = models.PositiveIntegerField(default=0)

@@ -1,12 +1,24 @@
+from django.core.validators import URLValidator
 from rest_framework import serializers
 
 from .models import EmployeeProfile, ProfileProject, ProfileSocialLink
 
 
 class ProfileSocialLinkSerializer(serializers.ModelSerializer):
+    url = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
     class Meta:
         model = ProfileSocialLink
         fields = ['id', 'platform', 'label', 'url', 'icon', 'order', 'is_active']
+
+    def validate_url(self, value):
+        normalized = str(value or '').strip()
+        if not normalized:
+            return ''
+        if not normalized.startswith(('http://', 'https://')):
+            normalized = f'https://{normalized}'
+        URLValidator()(normalized)
+        return normalized
 
 
 class ProfileProjectSerializer(serializers.ModelSerializer):
@@ -28,12 +40,42 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         model = EmployeeProfile
         fields = [
             'id', 'user', 'username', 'display_name', 'position', 'bio', 'photo',
-            'email', 'phone', 'website', 'location', 'meeting_url', 'vcard_enabled',
+            'email', 'phone', 'website', 'location', 'vcard_enabled',
             'theme_primary', 'theme_secondary', 'is_public', 'department',
             'department_name', 'social_links', 'featured_projects',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['user']
+
+    @staticmethod
+    def _normalize_url(url):
+        value = str(url or '').strip()
+        if not value:
+            return ''
+        if not value.startswith(('http://', 'https://')):
+            value = f'https://{value}'
+        return value
+
+    def validate_social_links(self, value):
+        if not value:
+            return []
+
+        cleaned = []
+        for index, item in enumerate(value):
+            if not isinstance(item, dict):
+                continue
+            url = self._normalize_url(item.get('url'))
+            if not url:
+                continue
+            cleaned.append({
+                'platform': item.get('platform') or ProfileSocialLink.Platform.OTHER,
+                'label': str(item.get('label', '')).strip(),
+                'url': url,
+                'icon': str(item.get('icon', '')).strip(),
+                'order': item.get('order', index + 1),
+                'is_active': item.get('is_active', True),
+            })
+        return cleaned
 
     def create(self, validated_data):
         social_data = validated_data.pop('social_links', [])
