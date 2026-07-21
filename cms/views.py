@@ -228,7 +228,68 @@ class MeetingRequestViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixi
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'official': 'This official is not available for meetings.'})
         ip = self.request.META.get('REMOTE_ADDR')
-        serializer.save(ip_address=ip, status=MeetingRequest.Status.PENDING)
+        meeting = serializer.save(ip_address=ip, status=MeetingRequest.Status.PENDING)
+        self._email_official(meeting)
+
+    def _email_official(self, meeting: MeetingRequest):
+        """Notify the official (and org inbox as fallback) about a new booking request."""
+        import logging
+
+        org = SiteSettings.load()
+        from_email = (org.email or '').strip() or 'info@streetlabsafrica.org'
+        org_name = org.org_name or 'Street Digital Labs Africa'
+        official = meeting.official
+
+        recipients = []
+        if (official.email or '').strip():
+            recipients.append(official.email.strip())
+        if from_email and from_email not in recipients:
+            recipients.append(from_email)
+        if not recipients:
+            return
+
+        preferred = timezone.localtime(meeting.preferred_at).strftime('%d %b %Y, %I:%M %p')
+        topic = meeting.topic.strip() or 'General meeting'
+        lines = [
+            f'Hi {official.name},',
+            '',
+            'You have a new meeting request via Street Labs Africa.',
+            '',
+            f'Requester: {meeting.name}',
+            f'Email: {meeting.email}',
+        ]
+        if meeting.phone:
+            lines.append(f'Phone: {meeting.phone}')
+        if meeting.organization:
+            lines.append(f'Organization: {meeting.organization}')
+        lines.extend([
+            f'Preferred time: {preferred}',
+            f'Topic: {topic}',
+        ])
+        if meeting.message.strip():
+            lines.extend(['', 'Message:', meeting.message.strip()])
+        lines.extend([
+            '',
+            '—',
+            f'{org_name}',
+            'Review this request in the backoffice → Meetings.',
+        ])
+
+        try:
+            mail = EmailMessage(
+                subject=f'New meeting request from {meeting.name}',
+                body='\n'.join(lines),
+                from_email=f'{org_name} <{from_email}>',
+                to=recipients,
+                reply_to=[meeting.email],
+            )
+            mail.send(fail_silently=False)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                'Failed to email meeting request %s to %s',
+                meeting.pk,
+                recipients,
+            )
 
 
 class SocialLinkViewSet(BackofficeModelViewSet):

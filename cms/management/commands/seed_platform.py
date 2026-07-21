@@ -55,15 +55,18 @@ class Command(BaseCommand):
 
         nav_items = [
             ('Home', '#home', 1),
-            ('About', '#about', 2),
-            ('Programs', '#services', 3),
+            ('Gallery', '#gallery', 2),
+            ('About', '#about', 3),
             ('Values', '#values', 4),
-            ('Team', '#team', 5),
-            ('Contact', '#contact', 6),
+            ('Programs', '#services', 5),
+            ('Team', '#team', 6),
+            ('Contact', '#contact', 7),
         ]
-        if not NavItem.objects.exists():
-            for label, href, order in nav_items:
-                NavItem.objects.create(label=label, href=href, order=order)
+        for label, href, order in nav_items:
+            NavItem.objects.update_or_create(
+                href=href,
+                defaults={'label': label, 'order': order, 'is_active': True},
+            )
 
         hero, _ = HeroSection.objects.get_or_create(
             pk=1,
@@ -173,7 +176,14 @@ class Command(BaseCommand):
         ]
         if not TeamMember.objects.exists():
             for i, (name, role, initials) in enumerate(team, start=1):
-                TeamMember.objects.create(name=name, role=role, initials=initials, order=i)
+                slug = initials.lower()
+                TeamMember.objects.create(
+                    name=name,
+                    role=role,
+                    initials=initials,
+                    email=f'{slug}@streetlabsafrica.org',
+                    order=i,
+                )
 
         if not SocialLink.objects.exists():
             for i, (platform, icon) in enumerate([
