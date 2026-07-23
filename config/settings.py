@@ -97,6 +97,17 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Trust TLS terminated in front of Django (Cloudflare / nginx).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+# Absolute media URLs in serializers should use https://api...
+if not DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        'https://streetlabsafrica.org',
+        'https://www.streetlabsafrica.org',
+        'https://api.streetlabsafrica.org',
+    ]
+
 # Hero videos and other CMS media can be large; default Django limit is ~2.5MB.
 # Keep in sync with reverse-proxy client_max_body_size (see nginx.conf).
 DATA_UPLOAD_MAX_MEMORY_SIZE = config(
