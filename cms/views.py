@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.mail import EmailMessage
 from django.utils import timezone
 from rest_framework import mixins, permissions, status, viewsets
@@ -229,67 +230,8 @@ class MeetingRequestViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixi
             raise ValidationError({'official': 'This official is not available for meetings.'})
         ip = self.request.META.get('REMOTE_ADDR')
         meeting = serializer.save(ip_address=ip, status=MeetingRequest.Status.PENDING)
-        self._email_official(meeting)
-
-    def _email_official(self, meeting: MeetingRequest):
-        """Notify the official (and org inbox as fallback) about a new booking request."""
-        import logging
-
-        org = SiteSettings.load()
-        from_email = (org.email or '').strip() or 'info@streetlabsafrica.org'
-        org_name = org.org_name or 'Street Digital Labs Africa'
-        official = meeting.official
-
-        recipients = []
-        if (official.email or '').strip():
-            recipients.append(official.email.strip())
-        if from_email and from_email not in recipients:
-            recipients.append(from_email)
-        if not recipients:
-            return
-
-        preferred = timezone.localtime(meeting.preferred_at).strftime('%d %b %Y, %I:%M %p')
-        topic = meeting.topic.strip() or 'General meeting'
-        lines = [
-            f'Hi {official.name},',
-            '',
-            'You have a new meeting request via Street Labs Africa.',
-            '',
-            f'Requester: {meeting.name}',
-            f'Email: {meeting.email}',
-        ]
-        if meeting.phone:
-            lines.append(f'Phone: {meeting.phone}')
-        if meeting.organization:
-            lines.append(f'Organization: {meeting.organization}')
-        lines.extend([
-            f'Preferred time: {preferred}',
-            f'Topic: {topic}',
-        ])
-        if meeting.message.strip():
-            lines.extend(['', 'Message:', meeting.message.strip()])
-        lines.extend([
-            '',
-            '—',
-            f'{org_name}',
-            'Review this request in the backoffice → Meetings.',
-        ])
-
-        try:
-            mail = EmailMessage(
-                subject=f'New meeting request from {meeting.name}',
-                body='\n'.join(lines),
-                from_email=f'{org_name} <{from_email}>',
-                to=recipients,
-                reply_to=[meeting.email],
-            )
-            mail.send(fail_silently=False)
-        except Exception:
-            logging.getLogger(__name__).exception(
-                'Failed to email meeting request %s to %s',
-                meeting.pk,
-                recipients,
-            )
+        from .emailing import notify_meeting_request
+        notify_meeting_request(meeting)
 
 
 class SocialLinkViewSet(BackofficeModelViewSet):
@@ -311,7 +253,9 @@ class ContactMessageViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixi
 
     def perform_create(self, serializer):
         ip = self.request.META.get('REMOTE_ADDR')
-        serializer.save(ip_address=ip)
+        msg = serializer.save(ip_address=ip)
+        from .emailing import notify_contact_received
+        notify_contact_received(msg)
 
     def perform_update(self, serializer):
         # Public cannot update; backoffice may mark read / update status only
@@ -326,8 +270,9 @@ class ContactMessageViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixi
         subject_override = (serializer.validated_data.get('subject') or '').strip()
 
         org = SiteSettings.load()
-        from_email = org.email or 'info@streetlabsafrica.org'
+        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'noreply@streetlabsafrica.org'
         org_name = org.org_name or 'Street Digital Labs Africa'
+        org_inbox = org.email or 'info@streetlabsafrica.org'
         original_subject = msg.subject.strip() if msg.subject else 'your message'
         subject = subject_override or f'Re: {original_subject}'
 
@@ -336,7 +281,7 @@ class ContactMessageViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixi
             f'{body}\n\n'
             f'—\n'
             f'{org_name}\n'
-            f'{from_email}\n\n'
+            f'{org_inbox}\n\n'
             f'---\n'
             f'On your message:\n'
             f'{msg.message}\n'
@@ -348,7 +293,7 @@ class ContactMessageViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixi
                 body=email_body,
                 from_email=f'{org_name} <{from_email}>',
                 to=[msg.email],
-                reply_to=[from_email],
+                reply_to=[org_inbox],
             )
             mail.send(fail_silently=False)
         except Exception as exc:

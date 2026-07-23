@@ -62,10 +62,17 @@ def record_scan(qr, request, link_clicked=None):
 
 
 def build_qr_image(qr, fmt='png'):
-    """Generate branded PNG/SVG for a QR code pointing at its public URL."""
-    url = qr.public_url
-    if getattr(settings, 'DEBUG', False) and getattr(settings, 'FRONTEND_URL', None):
-        url = f"{settings.FRONTEND_URL.rstrip('/')}{qr.public_path}"
+    """Generate branded PNG/SVG for a QR code pointing at its public URL.
+
+    Always encode the public site URL (PUBLIC_SITE_URL), never the local Vite
+    FRONTEND_URL — otherwise printed/deployed QRs open localhost when scanned.
+    Override with QR_PUBLIC_BASE_URL only when you intentionally need a custom host.
+    """
+    override = getattr(settings, 'QR_PUBLIC_BASE_URL', None) or ''
+    if override.strip():
+        url = f"{override.rstrip('/')}{qr.public_path}"
+    else:
+        url = qr.public_url
 
     if fmt == 'svg':
         return render_branded_qr_svg(url, qr), 'image/svg+xml'

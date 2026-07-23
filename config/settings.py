@@ -97,6 +97,20 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Hero videos and other CMS media can be large; default Django limit is ~2.5MB.
+# Keep in sync with reverse-proxy client_max_body_size (see nginx.conf).
+DATA_UPLOAD_MAX_MEMORY_SIZE = config(
+    'DATA_UPLOAD_MAX_MEMORY_SIZE',
+    default=600 * 1024 * 1024,  # 600 MB (hero clips up to ~500 MB)
+    cast=int,
+)
+FILE_UPLOAD_MAX_MEMORY_SIZE = config(
+    'FILE_UPLOAD_MAX_MEMORY_SIZE',
+    default=10 * 1024 * 1024,  # stream larger files to disk
+    cast=int,
+)
+DATA_UPLOAD_MAX_NUMBER_FIELDS = config('DATA_UPLOAD_MAX_NUMBER_FIELDS', default=2000, cast=int)
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -114,6 +128,9 @@ CORS_ALLOW_CREDENTIALS = True
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 PUBLIC_SITE_URL = config('PUBLIC_SITE_URL', default='https://streetlabsafrica.org')
+# Optional override for the URL encoded inside QR images (defaults to PUBLIC_SITE_URL).
+# Do not set this to localhost on production.
+QR_PUBLIC_BASE_URL = config('QR_PUBLIC_BASE_URL', default='')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -139,17 +156,19 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
 }
 
-# Email — replies to contact form use SiteSettings.email as From
+# Email — outbound mail (contact confirmations, meeting bookings, replies)
 EMAIL_BACKEND = config(
     'EMAIL_BACKEND',
     default='django.core.mail.backends.console.EmailBackend',
 )
-EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_HOST = config('EMAIL_HOST', default='nxmail.nexacon.africa')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='noreply@streetlabsafrica.org')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='info@streetlabsafrica.org')
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@streetlabsafrica.org')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Street Labs Africa Backend API',
