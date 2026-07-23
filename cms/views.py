@@ -1,3 +1,4 @@
+from django.http import FileResponse, Http404
 from django.utils import timezone
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -6,6 +7,7 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsBackofficeUser
 
+from .emailing import LOGO_PATH
 from .models import (
     AboutSection,
     AnnouncementBar,
@@ -58,6 +60,21 @@ from .serializers import (
     SocialLinkSerializer,
     TeamMemberSerializer,
 )
+
+
+class EmailLogoView(APIView):
+    """Public PNG for branded emails (hosted URL avoids Gmail attachment chips)."""
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        if not LOGO_PATH.is_file():
+            raise Http404('Email logo not found')
+        response = FileResponse(LOGO_PATH.open('rb'), content_type='image/png')
+        response['Cache-Control'] = 'public, max-age=86400'
+        response['Content-Disposition'] = 'inline; filename="sla-email-logo.png"'
+        return response
 
 
 class HomepageAPIView(APIView):

@@ -128,6 +128,8 @@ CORS_ALLOW_CREDENTIALS = True
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 PUBLIC_SITE_URL = config('PUBLIC_SITE_URL', default='https://streetlabsafrica.org')
+# Public API origin used for email logo (and similar absolute asset URLs).
+BACKEND_PUBLIC_URL = config('BACKEND_PUBLIC_URL', default='https://api.streetlabsafrica.org')
 # Optional override for the URL encoded inside QR images (defaults to PUBLIC_SITE_URL).
 # Do not set this to localhost on production.
 QR_PUBLIC_BASE_URL = config('QR_PUBLIC_BASE_URL', default='')

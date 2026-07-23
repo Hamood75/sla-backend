@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from email.mime.image import MIMEImage
 from html import escape
 from pathlib import Path
 
@@ -15,8 +14,19 @@ from .models import ContactMessage, MeetingRequest, SiteSettings
 
 logger = logging.getLogger(__name__)
 
-LOGO_CID = 'sla-logo'
-LOGO_PATH = Path(__file__).resolve().parent / 'email_assets' / 'logo.png'
+# White wordmark + mark for dark headers (same asset used by QR branding).
+LOGO_PATH = (
+    Path(__file__).resolve().parent.parent
+    / 'qr'
+    / 'assets'
+    / 'STREET DIGITAL LABS AFRICA WHITE.PNG'
+)
+
+
+def email_logo_url() -> str:
+    """Public HTTPS URL for the logo — avoids Gmail attachment chips from CID embeds."""
+    base = (getattr(settings, 'BACKEND_PUBLIC_URL', None) or 'https://api.streetlabsafrica.org').rstrip('/')
+    return f'{base}/api/cms/email-logo/'
 
 
 def org_identity():
@@ -94,8 +104,8 @@ def render_branded_email(*, title: str, intro_html: str, details_html: str = '',
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e6ebf2;">
         <tr>
-          <td style="background:#0a1f44;padding:22px 28px;text-align:center;">
-            <img src="cid:{LOGO_CID}" alt="{escape(org_name)}" width="180" style="display:inline-block;max-width:180px;height:auto;border:0;" />
+          <td style="background:#000000;padding:18px 24px;text-align:center;">
+            <img src="{escape(email_logo_url())}" alt="{escape(org_name)}" width="200" height="200" style="display:inline-block;width:200px;max-width:72%;height:auto;border:0;" />
           </td>
         </tr>
         <tr>
@@ -145,13 +155,6 @@ def send_mail_safe(
         )
         if html_body:
             mail.attach_alternative(html_body, 'text/html')
-            if LOGO_PATH.is_file():
-                with LOGO_PATH.open('rb') as fh:
-                    logo = MIMEImage(fh.read(), _subtype='png')
-                logo.add_header('Content-ID', f'<{LOGO_CID}>')
-                logo.add_header('Content-Disposition', 'inline', filename='logo.png')
-                mail.mixed_subtype = 'related'
-                mail.attach(logo)
         mail.send(fail_silently=False)
         return True
     except Exception:
