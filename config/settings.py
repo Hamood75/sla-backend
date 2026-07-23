@@ -169,6 +169,8 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@streetlabsafrica.org')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
+# Optional extra inbox for contact/meeting alerts (comma-separated). Falls back to SiteSettings.email.
+CONTACT_NOTIFY_EMAIL = config('CONTACT_NOTIFY_EMAIL', default='')
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Street Labs Africa Backend API',

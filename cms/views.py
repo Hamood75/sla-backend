@@ -1,5 +1,3 @@
-from django.conf import settings
-from django.core.mail import EmailMessage
 from django.utils import timezone
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -269,46 +267,23 @@ class ContactMessageViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixi
         body = serializer.validated_data['body'].strip()
         subject_override = (serializer.validated_data.get('subject') or '').strip()
 
-        org = SiteSettings.load()
-        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'noreply@streetlabsafrica.org'
-        org_name = org.org_name or 'Street Digital Labs Africa'
-        org_inbox = org.email or 'info@streetlabsafrica.org'
         original_subject = msg.subject.strip() if msg.subject else 'your message'
         subject = subject_override or f'Re: {original_subject}'
 
-        email_body = (
-            f'Hi {msg.name},\n\n'
-            f'{body}\n\n'
-            f'—\n'
-            f'{org_name}\n'
-            f'{org_inbox}\n\n'
-            f'---\n'
-            f'On your message:\n'
-            f'{msg.message}\n'
-        )
+        from .emailing import send_contact_reply
 
-        try:
-            mail = EmailMessage(
-                subject=subject,
-                body=email_body,
-                from_email=f'{org_name} <{from_email}>',
-                to=[msg.email],
-                reply_to=[org_inbox],
-            )
-            mail.send(fail_silently=False)
-        except Exception as exc:
+        if not send_contact_reply(msg=msg, body=body, subject=subject):
             return Response(
-                {'detail': f'Could not send email: {exc}'},
+                {'detail': 'Could not send email. Check SMTP settings and try again.'},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
+        msg.status = ContactMessage.Status.REPLIED
         msg.admin_reply = body
         msg.replied_at = timezone.now()
-        msg.replied_by = request.user if request.user.is_authenticated else None
-        msg.status = ContactMessage.Status.REPLIED
-        msg.save(update_fields=[
-            'admin_reply', 'replied_at', 'replied_by', 'status', 'updated_at',
-        ])
+        if request.user and request.user.is_authenticated:
+            msg.replied_by = request.user
+        msg.save(update_fields=['status', 'admin_reply', 'replied_at', 'replied_by', 'updated_at'])
         return Response(ContactMessageSerializer(msg).data)
 
 

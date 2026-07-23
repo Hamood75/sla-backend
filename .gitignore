@@ -5,7 +5,12 @@ __pycache__/
 db.sqlite3
 media/
 staticfiles/
+
+# Environment (keep .env.example tracked)
 .env
+.env.*
+!.env.example
+
 *.egg-info/
 .DS_Store
 .idea/
