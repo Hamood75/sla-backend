@@ -1,7 +1,7 @@
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 from django.conf import settings
-from django.conf.urls.static import static
+from django.views.static import serve as static_serve
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -83,5 +83,12 @@ urlpatterns = [
     path('api/', include(router.urls)),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Always serve MEDIA (uploads). Production currently proxies to Django on :8000
+# without a dedicated nginx media alias, and DEBUG=False disables django.conf.urls.static.
+urlpatterns += [
+    re_path(
+        r'^media/(?P<path>.*)$',
+        static_serve,
+        {'document_root': settings.MEDIA_ROOT},
+    ),
+]
