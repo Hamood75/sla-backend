@@ -471,6 +471,10 @@ class Donation(TimeStampedModel):
     external_reference = models.CharField(max_length=120, blank=True)
     transaction_reference = models.CharField(max_length=120, blank=True, unique=True)
     raw_gateway_response = models.JSONField(default=dict, blank=True)
+    payment_id = models.CharField(max_length=120, blank=True, db_index=True)
+    payment_link_id = models.CharField(max_length=120, blank=True)
+    initiation_channel = models.CharField(max_length=80, blank=True)
+    confirmed = models.BooleanField(default=False)
     donor_name = models.CharField(max_length=160, blank=True)
     donor_email = models.EmailField(blank=True)
 
@@ -479,6 +483,29 @@ class Donation(TimeStampedModel):
 
     def __str__(self):
         return self.transaction_reference or f'Donation {self.pk}'
+
+
+class DonationConfirmation(TimeStampedModel):
+    event_id = models.CharField(max_length=120, unique=True, db_index=True)
+    event_type = models.CharField(max_length=80, blank=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+    timestamp = models.CharField(max_length=40, blank=True)
+    duplicate = models.BooleanField(default=False)
+    payload = models.JSONField(default=dict, blank=True)
+    donation = models.ForeignKey(
+        Donation,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='confirmations',
+    )
+    processed = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.event_type} {self.event_id}'
 
 
 class Project(TimeStampedModel):

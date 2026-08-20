@@ -73,7 +73,9 @@ clean:
 
 deploy:
 	$(COMPOSE) up -d --build
-	$(COMPOSE) exec $(APP) python manage.py migrate
+	@echo "Waiting for web container to be ready..."
+	@sleep 5
+	@$(COMPOSE) logs --tail 20 $(APP)
 
 release:
 	docker build -t $(IMAGE) .

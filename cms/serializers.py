@@ -7,6 +7,7 @@ from .models import (
     ContactMessage,
     DonateModalCopy,
     Donation,
+    DonationConfirmation,
     DonationTier,
     Event,
     GalleryImage,
@@ -237,11 +238,23 @@ class DonationSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'amount', 'currency', 'donation_type', 'payment_method',
             'payment_method_code', 'phone', 'status', 'external_reference',
-            'transaction_reference', 'donor_name', 'donor_email', 'created_at',
+            'transaction_reference', 'payment_id', 'payment_link_id',
+            'initiation_channel', 'confirmed', 'donor_name', 'donor_email',
+            'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'status', 'external_reference', 'transaction_reference', 'created_at', 'payment_method',
+            'external_reference', 'transaction_reference', 'created_at', 'updated_at', 'payment_method',
         ]
+
+
+class DonationConfirmationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DonationConfirmation
+        fields = [
+            'id', 'event_id', 'event_type', 'received_at', 'timestamp',
+            'duplicate', 'payload', 'donation', 'processed', 'created_at',
+        ]
+        read_only_fields = fields
 
 
 class ProjectSerializer(serializers.ModelSerializer):

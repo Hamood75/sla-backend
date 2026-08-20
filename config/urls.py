@@ -14,8 +14,10 @@ from cms.views import (
     ContactMessageViewSet,
     DashboardStatsAPIView,
     DonateModalCopyView,
+    DonationConfirmationViewSet,
     DonationTierViewSet,
     DonationViewSet,
+    DonationWebhookView,
     EmailLogoView,
     EventViewSet,
     GalleryImageViewSet,
@@ -60,6 +62,7 @@ router.register(r'newsletter', NewsletterSubscriberViewSet, basename='newsletter
 router.register(r'donation-tiers', DonationTierViewSet, basename='donation-tiers')
 router.register(r'payment-methods', PaymentMethodViewSet, basename='payment-methods')
 router.register(r'donations', DonationViewSet, basename='donations')
+router.register(r'donation-confirmations', DonationConfirmationViewSet, basename='donation-confirmations')
 router.register(r'projects', ProjectViewSet, basename='projects')
 router.register(r'events', EventViewSet, basename='events')
 router.register(r'products', ProductViewSet, basename='products')
@@ -78,6 +81,7 @@ urlpatterns = [
     path('api/cms/donate-copy/', DonateModalCopyView.as_view(), name='donate-copy'),
     path('api/dashboard/stats/', DashboardStatsAPIView.as_view(), name='dashboard-stats'),
     path('api/analytics/platform/', PlatformAnalyticsAPIView.as_view(), name='platform-analytics'),
+    path('api/donations/webhook/', DonationWebhookView.as_view(), name='donation-webhook'),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/', include(router.urls)),

@@ -1,5 +1,9 @@
+from decimal import Decimal
+
+from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -15,6 +19,7 @@ from .models import (
     ContactMessage,
     DonateModalCopy,
     Donation,
+    DonationConfirmation,
     DonationTier,
     Event,
     GalleryImage,
@@ -40,6 +45,7 @@ from .serializers import (
     ContactMessageReplySerializer,
     ContactMessageSerializer,
     DonateModalCopySerializer,
+    DonationConfirmationSerializer,
     DonationSerializer,
     DonationTierSerializer,
     EventSerializer,
@@ -341,15 +347,25 @@ class DonateModalCopyView(APIView):
         return Response(serializer.data)
 
 
-class DonationViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin,
-                      viewsets.GenericViewSet):
+class DonationViewSet(viewsets.ModelViewSet):
     queryset = Donation.objects.select_related('payment_method')
     serializer_class = DonationSerializer
+    filterset_fields = ['status', 'confirmed', 'currency', 'donation_type']
+    search_fields = ['donor_name', 'donor_email', 'transaction_reference', 'payment_id']
+    ordering_fields = ['created_at', 'amount']
 
     def get_permissions(self):
         if self.action == 'create':
             return [permissions.AllowAny()]
         return [IsBackofficeUser()]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action in ('list', 'retrieve') and getattr(self.request.user, 'is_backoffice_user', False):
+            return qs
+        if self.action in ('list', 'retrieve'):
+            return Donation.objects.none()
+        return qs
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -361,6 +377,116 @@ class DonationViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.Ret
             external_reference=ref,
         )
         return Response(DonationSerializer(donation).data, status=status.HTTP_201_CREATED)
+
+
+class DonationConfirmationViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = DonationConfirmation.objects.select_related('donation')
+    serializer_class = DonationConfirmationSerializer
+    permission_classes = [IsBackofficeUser]
+    filterset_fields = ['event_type', 'duplicate', 'processed', 'donation']
+    search_fields = ['event_id']
+    ordering_fields = ['created_at', 'received_at']
+
+
+class DonationWebhookView(APIView):
+    """Receive payment gateway webhook events and confirm/create donations."""
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def post(self, request, *args, **kwargs):
+        events = request.data
+        if not isinstance(events, list):
+            events = [events]
+
+        results = []
+        for event in events:
+            results.append(self._process_event(event))
+
+        return Response({'processed': len(results), 'results': results}, status=status.HTTP_200_OK)
+
+    def _process_event(self, event):
+        payload = event.get('payload', {}) or {}
+        event_id = event.get('eventId') or payload.get('id')
+        event_type = event.get('eventType') or payload.get('type', '')
+
+        if not event_id:
+            return {'error': 'eventId is required', 'processed': False}
+
+        confirmation, created = DonationConfirmation.objects.get_or_create(
+            event_id=str(event_id),
+            defaults={
+                'event_type': str(event_type),
+                'received_at': parse_datetime(event.get('receivedAt')) if event.get('receivedAt') else None,
+                'timestamp': str(event.get('timestamp', '')),
+                'duplicate': bool(event.get('duplicate', False)),
+                'payload': event,
+            },
+        )
+
+        if not created:
+            return {'event_id': str(event_id), 'status': 'already recorded', 'processed': False}
+
+        data = (payload.get('data') or {})
+        payment_id = data.get('payment_id', '')
+        payment_link_id = data.get('payment_link_id', '')
+        amount = data.get('amount')
+        currency = data.get('currency', 'TZS')
+        channel = data.get('initiation_channel', '')
+        status_value = data.get('status', '')
+        donor = data.get('slug', '')
+
+        new_status = Donation.Status.PENDING
+        confirmed = False
+        if event_type.endswith('.success') or status_value == 'success':
+            new_status = Donation.Status.SUCCESS
+            confirmed = True
+        elif event_type.endswith('.failed') or status_value == 'failed':
+            new_status = Donation.Status.FAILED
+
+        defaults = {
+            'amount': Decimal(amount) if amount is not None else Decimal('0.00'),
+            'currency': currency,
+            'payment_link_id': payment_link_id,
+            'initiation_channel': channel,
+            'status': new_status,
+            'confirmed': confirmed,
+            'raw_gateway_response': event,
+        }
+        if donor:
+            defaults['donor_name'] = donor
+
+        if payment_id:
+            defaults['payment_id'] = payment_id
+            defaults['external_reference'] = payment_id
+
+        donation = None
+        if payment_id:
+            donation = Donation.objects.filter(
+                Q(payment_id=payment_id) | Q(external_reference=payment_id) | Q(transaction_reference=payment_id)
+            ).first()
+        if not donation and payment_link_id:
+            donation = Donation.objects.filter(payment_link_id=payment_link_id).first()
+
+        if donation:
+            for key, value in defaults.items():
+                setattr(donation, key, value)
+            donation.save(update_fields=list(defaults.keys()) + ['updated_at'])
+        else:
+            if payment_id:
+                defaults['transaction_reference'] = payment_id
+            donation = Donation.objects.create(**defaults)
+
+        confirmation.donation = donation
+        confirmation.processed = True
+        confirmation.save(update_fields=['donation', 'processed'])
+
+        return {
+            'event_id': str(event_id),
+            'donation_id': donation.pk,
+            'status': donation.status,
+            'confirmed': donation.confirmed,
+        }
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
