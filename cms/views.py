@@ -347,36 +347,17 @@ class DonateModalCopyView(APIView):
         return Response(serializer.data)
 
 
-class DonationViewSet(viewsets.ModelViewSet):
+class DonationViewSet(mixins.ListModelMixin,
+                      mixins.RetrieveModelMixin,
+                      mixins.UpdateModelMixin,
+                      mixins.DestroyModelMixin,
+                      viewsets.GenericViewSet):
     queryset = Donation.objects.select_related('payment_method')
     serializer_class = DonationSerializer
+    permission_classes = [IsBackofficeUser]
     filterset_fields = ['status', 'confirmed', 'currency', 'donation_type']
     search_fields = ['donor_name', 'donor_email', 'transaction_reference', 'payment_id']
     ordering_fields = ['created_at', 'amount']
-
-    def get_permissions(self):
-        if self.action == 'create':
-            return [permissions.AllowAny()]
-        return [IsBackofficeUser()]
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if self.action in ('list', 'retrieve') and getattr(self.request.user, 'is_backoffice_user', False):
-            return qs
-        if self.action in ('list', 'retrieve'):
-            return Donation.objects.none()
-        return qs
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        ref = f"SLA-{int(timezone.now().timestamp())}"
-        donation = serializer.save(
-            status=Donation.Status.SUCCESS,
-            transaction_reference=ref,
-            external_reference=ref,
-        )
-        return Response(DonationSerializer(donation).data, status=status.HTTP_201_CREATED)
 
 
 class DonationConfirmationViewSet(viewsets.ReadOnlyModelViewSet):
