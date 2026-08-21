@@ -5,7 +5,7 @@ import time
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Q, Count as models_Count
 from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -561,6 +561,33 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.action in ('list', 'retrieve') and not getattr(self.request.user, 'is_backoffice_user', False):
             return qs.filter(is_published=True)
         return qs
+
+
+class DonationStatsAPIView(APIView):
+    permission_classes = [IsBackofficeUser]
+
+    def get(self, request):
+        from django.db.models import Sum
+
+        qs = Donation.objects.all()
+        confirmed_qs = qs.filter(confirmed=True)
+
+        return Response({
+            'total_donations': qs.count(),
+            'successful': qs.filter(status=Donation.Status.SUCCESS).count(),
+            'pending': qs.filter(status=Donation.Status.PENDING).count(),
+            'failed': qs.filter(status=Donation.Status.FAILED).count(),
+            'confirmed_total': confirmed_qs.aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00'),
+            'confirmed_count': confirmed_qs.count(),
+            'confirmed_by_currency': list(
+                confirmed_qs.values('currency').annotate(
+                    total=Sum('amount'),
+                    count=models_Count('id'),
+                ).order_by('-total')
+            ),
+        })
 
 
 class DashboardStatsAPIView(APIView):
