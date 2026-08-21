@@ -489,11 +489,7 @@ class DonationWebhookView(APIView):
 
         donation = None
         if payment_id:
-            donation = Donation.objects.filter(
-                Q(payment_id=payment_id) | Q(external_reference=payment_id) | Q(transaction_reference=payment_id)
-            ).first()
-        if not donation and payment_link_id:
-            donation = Donation.objects.filter(payment_link_id=payment_link_id).first()
+            donation = Donation.objects.filter(payment_id=payment_id).first()
 
         if donation:
             for key, value in defaults.items():
