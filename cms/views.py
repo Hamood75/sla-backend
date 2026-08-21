@@ -460,6 +460,8 @@ class DonationWebhookView(APIView):
         currency = data.get('currency', 'TZS')
         channel = data.get('initiation_channel', '')
         status_value = data.get('status', '')
+        donor_name = data.get('donor_name', '') or data.get('customer_name', '')
+        donor_email = data.get('donor_email', '') or data.get('customer_email', '')
         new_status = Donation.Status.PENDING
         confirmed = False
         if event_type.endswith('.succeeded') or status_value == 'succeeded':
@@ -479,7 +481,9 @@ class DonationWebhookView(APIView):
             'confirmed': confirmed,
             'raw_gateway_response': event,
         }
-        defaults['donor_name'] = 'Anonymous'
+        defaults['donor_name'] = donor_name if donor_name else 'Anonymous'
+        if donor_email:
+            defaults['donor_email'] = donor_email
 
         if payment_id:
             defaults['payment_id'] = payment_id
