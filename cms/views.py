@@ -1,7 +1,12 @@
+import hashlib
+import hmac
+import json
+import time
 from decimal import Decimal
 
+from django.conf import settings
 from django.db.models import Q
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import mixins, permissions, status, viewsets
@@ -370,37 +375,77 @@ class DonationConfirmationViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class DonationWebhookView(APIView):
-    """Receive payment gateway webhook events and confirm/create donations."""
+    """Receive Pay-IT webhook events, verify signature, confirm/create donations."""
 
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
 
     def post(self, request, *args, **kwargs):
-        events = request.data
-        if not isinstance(events, list):
-            events = [events]
+        secret = settings.PAYIT_SECRET_KEY
+        if not secret:
+            return HttpResponse('Webhook secret not configured', status=500)
 
-        results = []
-        for event in events:
-            results.append(self._process_event(event))
+        signature = request.headers.get('PayIT-Signature', '')
+        timestamp = request.headers.get('PayIT-Timestamp', '')
+        header_event_id = request.headers.get('PayIT-Event-Id', '')
 
-        return Response({'processed': len(results), 'results': results}, status=status.HTTP_200_OK)
+        if not signature or not timestamp or not header_event_id:
+            return HttpResponse('Missing required Pay-IT headers', status=400)
+
+        # Replay tolerance check
+        try:
+            ts_int = int(timestamp)
+        except (ValueError, TypeError):
+            return HttpResponse('Invalid timestamp', status=400)
+
+        tolerance = settings.PAYIT_WEBHOOK_TOLERANCE_SECONDS
+        if abs(time.time() - ts_int) > tolerance:
+            return HttpResponse('Timestamp outside tolerance window', status=401)
+
+        # Read raw body for signature verification
+        raw_body = request.body
+        if not raw_body:
+            return HttpResponse('Empty body', status=400)
+
+        # Compute expected signature: v1=HMAC-SHA256(secret, timestamp + "." + raw_body)
+        signed_payload = f'{timestamp}.'.encode() + raw_body
+        expected_sig = 'v1=' + hmac.new(
+            secret.encode(), signed_payload, hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(signature, expected_sig):
+            return HttpResponse('Invalid signature', status=401)
+
+        # Parse the verified body
+        try:
+            event = json.loads(raw_body)
+        except (json.JSONDecodeError, ValueError):
+            return HttpResponse('Invalid JSON', status=400)
+
+        # Confirm header event ID matches body id
+        body_event_id = event.get('id', '')
+        if body_event_id != header_event_id:
+            return HttpResponse('Event ID mismatch', status=400)
+
+        result = self._process_event(event)
+        return Response({'processed': 1, 'results': [result]}, status=status.HTTP_200_OK)
 
     def _process_event(self, event):
-        payload = event.get('payload', {}) or {}
-        event_id = event.get('eventId') or payload.get('id')
-        event_type = event.get('eventType') or payload.get('type', '')
+        event_id = event.get('id', '')
+        event_type = event.get('type', '')
+        created_at = event.get('created_at', '')
+        data = event.get('data', {}) or {}
 
         if not event_id:
-            return {'error': 'eventId is required', 'processed': False}
+            return {'error': 'event id is required', 'processed': False}
 
         confirmation, created = DonationConfirmation.objects.get_or_create(
             event_id=str(event_id),
             defaults={
                 'event_type': str(event_type),
-                'received_at': parse_datetime(event.get('receivedAt')) if event.get('receivedAt') else None,
-                'timestamp': str(event.get('timestamp', '')),
-                'duplicate': bool(event.get('duplicate', False)),
+                'received_at': parse_datetime(created_at) if created_at else None,
+                'timestamp': str(event.get('api_version', '')),
+                'duplicate': False,
                 'payload': event,
             },
         )
@@ -408,7 +453,6 @@ class DonationWebhookView(APIView):
         if not created:
             return {'event_id': str(event_id), 'status': 'already recorded', 'processed': False}
 
-        data = (payload.get('data') or {})
         payment_id = data.get('payment_id', '')
         payment_link_id = data.get('payment_link_id', '')
         amount = data.get('amount')
@@ -419,10 +463,12 @@ class DonationWebhookView(APIView):
 
         new_status = Donation.Status.PENDING
         confirmed = False
-        if event_type.endswith('.success') or status_value == 'success':
+        if event_type.endswith('.succeeded') or status_value == 'succeeded':
             new_status = Donation.Status.SUCCESS
             confirmed = True
         elif event_type.endswith('.failed') or status_value == 'failed':
+            new_status = Donation.Status.FAILED
+        elif event_type.endswith('.expired') or status_value == 'expired':
             new_status = Donation.Status.FAILED
 
         defaults = {

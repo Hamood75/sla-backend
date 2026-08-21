@@ -185,6 +185,10 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 # Optional extra inbox for contact/meeting alerts (comma-separated). Falls back to SiteSettings.email.
 CONTACT_NOTIFY_EMAIL = config('CONTACT_NOTIFY_EMAIL', default='')
 
+# Pay-IT webhook signing secret and replay tolerance
+PAYIT_SECRET_KEY = config('PAYIT_SECRET_KEY', default='')
+PAYIT_WEBHOOK_TOLERANCE_SECONDS = config('PAYIT_WEBHOOK_TOLERANCE_SECONDS', default=300, cast=int)
+
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Street Labs Africa Backend API',
     'DESCRIPTION': 'Django REST API powering CMS, employee profiles, and Smart QR platform.',
