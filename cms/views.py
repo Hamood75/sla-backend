@@ -52,6 +52,7 @@ from .serializers import (
     DonateModalCopySerializer,
     DonationConfirmationSerializer,
     DonationSerializer,
+    DonationStatsSerializer,
     DonationTierSerializer,
     EventSerializer,
     GalleryImageSerializer,
@@ -572,7 +573,7 @@ class DonationStatsAPIView(APIView):
         qs = Donation.objects.all()
         confirmed_qs = qs.filter(confirmed=True)
 
-        return Response({
+        data = {
             'total_donations': qs.count(),
             'successful': qs.filter(status=Donation.Status.SUCCESS).count(),
             'pending': qs.filter(status=Donation.Status.PENDING).count(),
@@ -587,7 +588,9 @@ class DonationStatsAPIView(APIView):
                     count=models_Count('id'),
                 ).order_by('-total')
             ),
-        })
+        }
+        serializer = DonationStatsSerializer(data)
+        return Response(serializer.data)
 
 
 class DashboardStatsAPIView(APIView):

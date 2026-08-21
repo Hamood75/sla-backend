@@ -289,3 +289,19 @@ class HomepageSerializer(serializers.Serializer):
     team = TeamMemberSerializer(many=True)
     social_links = SocialLinkSerializer(many=True)
     donate = serializers.DictField()
+
+
+class DonationCurrencyBreakdownSerializer(serializers.Serializer):
+    currency = serializers.CharField()
+    total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    count = serializers.IntegerField()
+
+
+class DonationStatsSerializer(serializers.Serializer):
+    total_donations = serializers.IntegerField()
+    successful = serializers.IntegerField()
+    pending = serializers.IntegerField()
+    failed = serializers.IntegerField()
+    confirmed_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    confirmed_count = serializers.IntegerField()
+    confirmed_by_currency = DonationCurrencyBreakdownSerializer(many=True)
