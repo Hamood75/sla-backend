@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     # Local
     'accounts',
     'cms',
+    'events',
     'profiles',
     'qr',
     'analytics',

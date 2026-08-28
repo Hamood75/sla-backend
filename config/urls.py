@@ -84,6 +84,7 @@ urlpatterns = [
     path('api/analytics/platform/', PlatformAnalyticsAPIView.as_view(), name='platform-analytics'),
     path('api/donations/stats/', DonationStatsAPIView.as_view(), name='donation-stats'),
     path('api/donations/webhook/', DonationWebhookView.as_view(), name='donation-webhook'),
+    path('api/', include('events.urls')),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/', include(router.urls)),
