@@ -1,9 +1,15 @@
+import base64
+import uuid
+
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from rest_framework import serializers
 
 from .models import (
     BoothApplication,
     EventStat,
     ExpoEvent,
+    ExpoEventHeroImage,
     ExpoVillage,
     FocusArea,
     MediaAsset,
@@ -13,8 +19,55 @@ from .models import (
     Speaker,
     VillageBooth,
     VillageGallery,
+    VillageHighlight,
     VillageSchedule,
 )
+
+
+class AbsoluteURLImageField(serializers.ImageField):
+    """ImageField that accepts base64 data URIs on input and returns absolute URLs in responses."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, str) and data.startswith('data:'):
+            header, _, b64_content = data.partition(',')
+            mime_type = header.split(';')[0].split(':')[1] if ':' in header else 'image/png'
+            ext = mime_type.split('/')[-1].split('+')[0]
+            name = f'upload_{uuid.uuid4().hex[:8]}.{ext}'
+            decoded = base64.b64decode(b64_content)
+            return ContentFile(decoded, name=name)
+        return super().to_internal_value(data)
+
+    def to_representation(self, value):
+        if not value:
+            return ''
+        url = value.url
+        request = self.context.get('request')
+        if request is not None:
+            return request.build_absolute_uri(url)
+        return url
+
+
+class AbsoluteURLFileField(serializers.FileField):
+    """FileField that accepts base64 data URIs on input and returns absolute URLs in responses."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, str) and data.startswith('data:'):
+            header, _, b64_content = data.partition(',')
+            mime_type = header.split(';')[0].split(':')[1] if ':' in header else 'application/octet-stream'
+            ext = mime_type.split('/')[-1].split('+')[0]
+            name = f'upload_{uuid.uuid4().hex[:8]}.{ext}'
+            decoded = base64.b64decode(b64_content)
+            return ContentFile(decoded, name=name)
+        return super().to_internal_value(data)
+
+    def to_representation(self, value):
+        if not value:
+            return None
+        url = value.url
+        request = self.context.get('request')
+        if request is not None:
+            return request.build_absolute_uri(url)
+        return url
 
 
 class EventStatSerializer(serializers.ModelSerializer):
@@ -34,7 +87,7 @@ class FocusAreaSerializer(serializers.ModelSerializer):
     """Public-facing serializer with camelCase output matching frontend docs."""
     accentColor = serializers.CharField(source='accent_color')
     badgeColor = serializers.CharField(source='badge_color')
-    img = serializers.ImageField(source='image', use_url=True)
+    img = AbsoluteURLImageField(source='image')
     desc = serializers.CharField(source='description')
 
     class Meta:
@@ -44,7 +97,7 @@ class FocusAreaSerializer(serializers.ModelSerializer):
 
 class AdminFocusAreaSerializer(serializers.ModelSerializer):
     """Admin CRUD serializer for FocusArea (snake_case for admin forms)."""
-    image = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    image = AbsoluteURLImageField(required=False, allow_null=True)
 
     class Meta:
         model = FocusArea
@@ -57,7 +110,7 @@ class AdminFocusAreaSerializer(serializers.ModelSerializer):
 
 class PartnerSerializer(serializers.ModelSerializer):
     """Public-facing serializer with camelCase output matching frontend docs."""
-    logo = serializers.ImageField(source='logo', use_url=True)
+    logo = AbsoluteURLImageField()
 
     class Meta:
         model = Partner
@@ -66,15 +119,27 @@ class PartnerSerializer(serializers.ModelSerializer):
 
 class AdminPartnerSerializer(serializers.ModelSerializer):
     """Admin CRUD serializer for Partner (snake_case for admin forms)."""
-    logo = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    logo = AbsoluteURLImageField(required=False, allow_null=True)
 
     class Meta:
         model = Partner
         fields = ['id', 'event', 'name', 'logo', 'tier', 'website_url', 'order', 'created_at', 'updated_at']
 
 
+class HeroImageSerializer(serializers.ModelSerializer):
+    """Serializer for ExpoEventHeroImage — returns absolute URL for image."""
+    image = AbsoluteURLImageField(required=False, allow_null=True)
+
+    class Meta:
+        model = ExpoEventHeroImage
+        fields = ['id', 'event', 'image', 'order', 'created_at', 'updated_at']
+        extra_kwargs = {'event': {'write_only': True}}
+
+
 class ExpoEventSerializer(serializers.ModelSerializer):
     """Admin CRUD serializer for ExpoEvent (snake_case for admin forms)."""
+    hero_images = HeroImageSerializer(many=True, read_only=True)
+
     class Meta:
         model = ExpoEvent
         fields = [
@@ -85,16 +150,40 @@ class ExpoEventSerializer(serializers.ModelSerializer):
         ]
 
 
+class EventEditionSerializer(serializers.Serializer):
+    """Public serializer for listing all event editions/years."""
+    id = serializers.UUIDField()
+    year = serializers.IntegerField()
+    title = serializers.CharField()
+    tagline = serializers.CharField()
+    start_date = serializers.DateTimeField()
+    end_date = serializers.DateTimeField()
+    venue_name = serializers.CharField()
+    is_current = serializers.BooleanField()
+
+
+class AdminEventEditionSerializer(serializers.Serializer):
+    """Admin serializer for listing all event years with status flags."""
+    id = serializers.UUIDField()
+    year = serializers.IntegerField()
+    title = serializers.CharField()
+    start_date = serializers.DateTimeField()
+    end_date = serializers.DateTimeField()
+    is_active = serializers.BooleanField()
+    is_published = serializers.BooleanField()
+    is_current = serializers.BooleanField()
+
+
 class LandingEventSerializer(serializers.ModelSerializer):
     """Public event serializer with camelCase output for landing page."""
     startDate = serializers.DateTimeField(source='start_date')
     endDate = serializers.DateTimeField(source='end_date')
-    heroImages = serializers.ListField(source='hero_images')
+    heroImages = HeroImageSerializer(many=True, source='hero_images', read_only=True)
     venue = serializers.SerializerMethodField()
 
     class Meta:
         model = ExpoEvent
-        fields = ['id', 'year', 'title', 'tagline', 'startDate', 'endDate', 'venue', 'heroImages']
+        fields = ['id', 'year', 'title', 'tagline', 'description', 'startDate', 'endDate', 'venue', 'heroImages']
 
     def get_venue(self, obj):
         return {
@@ -107,6 +196,7 @@ class LandingEventSerializer(serializers.ModelSerializer):
 
 class AdminEventDetailSerializer(serializers.ModelSerializer):
     """Admin detail serializer with all nested sub-items for full event management."""
+    hero_images = HeroImageSerializer(many=True, read_only=True)
     stats = AdminEventStatSerializer(many=True, read_only=True)
     focus_areas = AdminFocusAreaSerializer(many=True, read_only=True)
     partners = AdminPartnerSerializer(many=True, read_only=True)
@@ -130,28 +220,28 @@ class AdminEventDetailSerializer(serializers.ModelSerializer):
 
     def get_villages(self, obj):
         qs = obj.villages.order_by('order')
-        return ExpoVillageListSerializer(qs, many=True).data
+        return ExpoVillageListSerializer(qs, many=True, context=self.context).data
 
     def get_speakers(self, obj):
         qs = obj.speakers.order_by('order')
-        return SpeakerSerializer(qs, many=True).data
+        return SpeakerSerializer(qs, many=True, context=self.context).data
 
     def get_sessions(self, obj):
         qs = obj.sessions.order_by('day_number', 'order')
-        return SessionSerializer(qs, many=True).data
+        return SessionSerializer(qs, many=True, context=self.context).data
 
     def get_booth_applications(self, obj):
         qs = obj.booth_applications.order_by('-created_at')
-        return BoothApplicationSerializer(qs, many=True).data
+        return BoothApplicationSerializer(qs, many=True, context=self.context).data
 
     def get_registrations(self, obj):
         qs = obj.registrations.order_by('-created_at')
-        return RegistrationSerializer(qs, many=True).data
+        return RegistrationSerializer(qs, many=True, context=self.context).data
 
 
 class VillageBoothSerializer(serializers.ModelSerializer):
     """Admin CRUD serializer for VillageBooth (snake_case)."""
-    logo = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    logo = AbsoluteURLImageField(required=False, allow_null=True)
 
     class Meta:
         model = VillageBooth
@@ -167,7 +257,7 @@ class PublicVillageBoothSerializer(serializers.ModelSerializer):
     boothNo = serializers.CharField(source='booth_number')
     liveDemo = serializers.CharField(source='live_demo')
     websiteUrl = serializers.CharField(source='website_url')
-    logoUrl = serializers.ImageField(source='logo', use_url=True)
+    logoUrl = AbsoluteURLImageField(source='logo')
     isFeatured = serializers.BooleanField(source='is_featured')
     desc = serializers.CharField(source='description')
 
@@ -197,7 +287,7 @@ class PublicVillageScheduleSerializer(serializers.ModelSerializer):
 
 class VillageGallerySerializer(serializers.ModelSerializer):
     """Admin CRUD serializer for VillageGallery (snake_case)."""
-    image = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    image = AbsoluteURLImageField(required=False, allow_null=True)
 
     class Meta:
         model = VillageGallery
@@ -206,11 +296,25 @@ class VillageGallerySerializer(serializers.ModelSerializer):
 
 class PublicVillageGallerySerializer(serializers.ModelSerializer):
     """Public serializer with camelCase output for village detail."""
-    url = serializers.ImageField(source='image', use_url=True)
+    url = AbsoluteURLImageField(source='image')
 
     class Meta:
         model = VillageGallery
         fields = ['id', 'url', 'title', 'caption']
+
+
+class VillageHighlightSerializer(serializers.ModelSerializer):
+    """Admin CRUD serializer for VillageHighlight (snake_case)."""
+    class Meta:
+        model = VillageHighlight
+        fields = ['id', 'village', 'icon', 'title', 'description', 'order']
+
+
+class PublicVillageHighlightSerializer(serializers.ModelSerializer):
+    """Public serializer for village highlights."""
+    class Meta:
+        model = VillageHighlight
+        fields = ['id', 'icon', 'title', 'description', 'order']
 
 
 class ExpoVillageListSerializer(serializers.ModelSerializer):
@@ -218,7 +322,7 @@ class ExpoVillageListSerializer(serializers.ModelSerializer):
     booths_count = serializers.SerializerMethodField()
     demos_count = serializers.SerializerMethodField()
 
-    hero_image = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    hero_image = AbsoluteURLImageField(required=False, allow_null=True)
 
     class Meta:
         model = ExpoVillage
@@ -239,7 +343,7 @@ class ExpoVillageListSerializer(serializers.ModelSerializer):
 class PublicVillageListSerializer(serializers.ModelSerializer):
     """Public village list serializer with camelCase output matching frontend docs."""
     themeColor = serializers.CharField(source='theme_color')
-    heroImage = serializers.ImageField(source='hero_image', use_url=True)
+    heroImage = AbsoluteURLImageField(source='hero_image')
     boothsCount = serializers.SerializerMethodField()
     demosCount = serializers.SerializerMethodField()
     desc = serializers.CharField(source='description')
@@ -258,7 +362,7 @@ class PublicVillageListSerializer(serializers.ModelSerializer):
 class ExpoVillageDetailSerializer(serializers.ModelSerializer):
     """Admin detail serializer for village (snake_case with nested)."""
     stats = serializers.JSONField(required=False)
-    hero_image = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    hero_image = AbsoluteURLImageField(required=False, allow_null=True)
     booths = VillageBoothSerializer(many=True, read_only=True)
     schedule = VillageScheduleSerializer(
         many=True, read_only=True, source='schedules'
@@ -266,21 +370,26 @@ class ExpoVillageDetailSerializer(serializers.ModelSerializer):
     gallery = VillageGallerySerializer(
         many=True, read_only=True, source='galleries'
     )
+    highlights = VillageHighlightSerializer(many=True, read_only=True)
 
     class Meta:
         model = ExpoVillage
         fields = [
             'id', 'event', 'slug', 'name', 'hall', 'emoji', 'theme_color',
-            'tagline', 'description', 'hero_image', 'stats',
+            'tagline', 'description', 'why_visit', 'highlights', 'hero_image', 'stats',
             'booths', 'schedule', 'gallery', 'order',
         ]
-        read_only_fields = ['booths', 'schedule', 'gallery']
+        read_only_fields = ['booths', 'schedule', 'gallery', 'highlights']
 
 
 class PublicVillageDetailSerializer(serializers.ModelSerializer):
     """Public village detail serializer with camelCase output matching frontend docs."""
     themeColor = serializers.CharField(source='theme_color')
-    heroImage = serializers.ImageField(source='hero_image', use_url=True)
+    heroImage = AbsoluteURLImageField(source='hero_image')
+    whyVisit = serializers.CharField(source='why_visit')
+    keyHighlights = PublicVillageHighlightSerializer(
+        many=True, read_only=True, source='highlights'
+    )
     stats = serializers.JSONField(required=False)
     booths = PublicVillageBoothSerializer(many=True, read_only=True)
     schedule = PublicVillageScheduleSerializer(
@@ -294,31 +403,52 @@ class PublicVillageDetailSerializer(serializers.ModelSerializer):
         model = ExpoVillage
         fields = [
             'id', 'slug', 'name', 'hall', 'emoji', 'themeColor',
-            'tagline', 'description', 'heroImage', 'stats',
+            'tagline', 'description', 'whyVisit', 'keyHighlights', 'heroImage', 'stats',
             'booths', 'schedule', 'gallery', 'order',
         ]
 
 
 class SpeakerSerializer(serializers.ModelSerializer):
     """Admin CRUD serializer for Speaker (snake_case)."""
-    photo = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    photo = AbsoluteURLImageField(required=False, allow_null=True)
+    is_approved = serializers.BooleanField(source='is_confirmed', read_only=True)
 
     class Meta:
         model = Speaker
         fields = [
             'id', 'event', 'name', 'title', 'org', 'initials',
             'color', 'accent_light', 'photo', 'bio', 'order', 'is_confirmed',
+            'is_approved',
         ]
 
 
 class PublicSpeakerSerializer(serializers.ModelSerializer):
     """Public speaker serializer with camelCase output matching frontend docs."""
     accentLight = serializers.CharField(source='accent_light')
-    photo = serializers.ImageField(source='photo', use_url=True)
+    isApproved = serializers.BooleanField(source='is_confirmed', read_only=True)
+    photo = serializers.SerializerMethodField()
 
     class Meta:
         model = Speaker
-        fields = ['id', 'name', 'title', 'org', 'initials', 'color', 'accentLight', 'photo', 'bio', 'order']
+        fields = ['id', 'name', 'title', 'org', 'initials', 'color', 'accentLight', 'isApproved', 'photo', 'bio', 'order']
+
+    def get_photo(self, obj):
+        if obj.photo:
+            request = self.context.get('request')
+            url = obj.photo.url
+            if request is not None:
+                return request.build_absolute_uri(url)
+            return url
+        initials = obj.initials or ''.join([n[:1] for n in obj.name.split()[:2] if n]).upper()
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">'
+            f'<rect width="200" height="200" fill="{obj.color}"/>'
+            f'<text x="50%" y="50%" font-size="80" font-family="sans-serif" fill="white" '
+            f'text-anchor="middle" dominant-baseline="central">{initials}</text>'
+            f'</svg>'
+        )
+        b64 = base64.b64encode(svg.encode()).decode()
+        return f'data:image/svg+xml;base64,{b64}'
 
 
 class SessionSerializer(serializers.ModelSerializer):
@@ -390,6 +520,13 @@ class RegistrationSerializer(serializers.ModelSerializer):
             'organization', 'extra_data', 'status', 'badge_code',
             'agree_terms', 'created_at', 'updated_at',
         ]
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        if (instance.status == Registration.Status.APPROVED
+                and instance.type == Registration.RegType.SPEAKER):
+            instance.create_speaker()
+        return instance
 
 
 class GuestRegistrationSerializer(serializers.Serializer):
@@ -530,8 +667,8 @@ class BoothPublicRegistrationSerializer(serializers.Serializer):
 class MediaAssetSerializer(serializers.ModelSerializer):
     """Serializer for MediaAsset with base64 file upload support."""
     file_base64 = serializers.CharField(write_only=True, required=False)
-    file = serializers.FileField(use_url=True, read_only=True)
-    thumbnail = serializers.ImageField(use_url=True, read_only=True)
+    file = AbsoluteURLFileField(read_only=True)
+    thumbnail = AbsoluteURLImageField(read_only=True)
     altText = serializers.CharField(source='alt_text', required=False, allow_blank=True)
     eventId = serializers.PrimaryKeyRelatedField(
         source='event', queryset=ExpoEvent.objects.all(), required=False, allow_null=True
@@ -574,28 +711,36 @@ class LandingPageResponseSerializer(serializers.Serializer):
     data = serializers.SerializerMethodField()
 
     def get_data(self, event):
+        request = self.context.get('request')
         villages = event.villages.order_by('order')
         village_data = [{
             'id': str(v.id), 'name': v.name, 'slug': v.slug,
-            'img': v.hero_image.url if v.hero_image else '', 'desc': v.description,
+            'img': request.build_absolute_uri(v.hero_image.url) if v.hero_image and request else (v.hero_image.url if v.hero_image else ''),
+            'desc': v.description,
             'booths': v.booths.count(), 'demos': v.schedules.count(),
             'order': v.order,
         } for v in villages]
 
         gallery = [{
-            'id': str(g.id), 'url': g.image.url if g.image else '', 'title': g.title,
+            'id': str(g.id),
+            'url': request.build_absolute_uri(g.image.url) if g.image and request else (g.image.url if g.image else ''),
+            'title': g.title,
             'layout': 'standard',
         } for g in VillageGallery.objects.filter(village__event=event)[:4]]
 
         return {
-            'event': LandingEventSerializer(event).data,
+            'event': LandingEventSerializer(event, context=self.context).data,
             'stats': list(event.stats.values('label', 'value')),
             'villages': village_data,
             'gallery': gallery,
-            'focusAreas': FocusAreaSerializer(event.focus_areas.all(), many=True).data,
-            'partners': PartnerSerializer(event.partners.all(), many=True).data,
+            'focusAreas': FocusAreaSerializer(
+                event.focus_areas.all(), many=True, context=self.context
+            ).data,
+            'partners': PartnerSerializer(
+                event.partners.all(), many=True, context=self.context
+            ).data,
             'featuredSpeakers': PublicSpeakerSerializer(
-                event.speakers.filter(is_confirmed=True)[:6], many=True
+                event.speakers.filter(is_confirmed=True), many=True, context=self.context
             ).data,
         }
 

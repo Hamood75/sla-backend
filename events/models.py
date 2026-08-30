@@ -24,9 +24,6 @@ class ExpoEvent(TimeStampedModel):
     venue_address = models.TextField()
     venue_lat = models.FloatField(null=True, blank=True)
     venue_lng = models.FloatField(null=True, blank=True)
-    hero_images = ArrayField(
-        models.CharField(max_length=500), default=list, blank=True
-    )
     is_active = models.BooleanField(default=False)
     is_published = models.BooleanField(default=False)
 
@@ -36,6 +33,20 @@ class ExpoEvent(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+
+class ExpoEventHeroImage(TimeStampedModel):
+    """Hero images for an ExpoEvent, stored in a separate table for easy management."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey(
+        ExpoEvent, on_delete=models.CASCADE, related_name='hero_images'
+    )
+    image = models.ImageField(upload_to='events/heroes/')
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'event_hero_images'
+        ordering = ['order', 'id']
 
 
 class EventStat(TimeStampedModel):
@@ -116,6 +127,7 @@ class ExpoVillage(TimeStampedModel):
     tagline = models.TextField()
     description = models.TextField()
     hero_image = models.ImageField(upload_to='events/villages/', blank=True)
+    why_visit = models.TextField(blank=True, default='')
     stats = models.JSONField(default=list, blank=True)
     order = models.PositiveIntegerField(default=0)
 
@@ -185,6 +197,24 @@ class VillageGallery(TimeStampedModel):
 
     class Meta:
         db_table = 'village_galleries'
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return self.title
+
+
+class VillageHighlight(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    village = models.ForeignKey(
+        ExpoVillage, on_delete=models.CASCADE, related_name='highlights'
+    )
+    icon = models.CharField(max_length=50)
+    title = models.CharField(max_length=150)
+    description = models.TextField()
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'village_highlights'
         ordering = ['order', 'id']
 
     def __str__(self):
@@ -288,6 +318,29 @@ class Registration(TimeStampedModel):
 
     def __str__(self):
         return f'{self.reference_no} - {self.first_name} {self.last_name}'
+
+    def create_speaker(self):
+        """Create a Speaker record from a SPEAKER registration if one does not exist."""
+        if self.type != self.RegType.SPEAKER:
+            return None
+        name = f'{self.first_name or ""} {self.last_name or ""}'.strip()
+        speaker = Speaker.objects.filter(event=self.event, name=name).first()
+        if speaker:
+            return speaker
+        initials = (self.first_name[:1] + self.last_name[:1]).upper() if self.first_name and self.last_name else ''
+        extra = self.extra_data or {}
+        return Speaker.objects.create(
+            event=self.event,
+            name=name,
+            title=extra.get('talk_title', '') or self.organization or '',
+            org=self.organization or '',
+            initials=initials,
+            color='#2563EB',
+            accent_light='#DBEAFE',
+            bio=extra.get('speaker_bio', '') or extra.get('talk_abstract', ''),
+            is_confirmed=True,
+            order=Speaker.objects.filter(event=self.event).count() + 1,
+        )
 
 
 class Speaker(TimeStampedModel):

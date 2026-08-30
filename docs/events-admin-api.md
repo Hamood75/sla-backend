@@ -7,11 +7,11 @@ Roles allowed: `SUPER_ADMIN`, `ADMIN`, `EDITOR` (or `is_superuser`).
 
 All admin endpoints return **snake_case** field names. Upload form fields and media library query params use **camelCase** (`altText`, `eventId`, `fileBase64`).
 
-Image and file fields use Django `ImageField`/`FileField` — responses return absolute URLs (e.g. `"/media/events/villages/govtech.png"`). Uploads accept base64 data URIs via JSON or multipart form data.
+Image and file fields use Django `ImageField`/`FileField` — responses return **absolute URLs** (e.g. `"http://localhost:8089/media/events/villages/govtech.png"`). On create/update, these fields accept **base64 data URIs** (`data:image/png;base64,...`) in JSON or **multipart file uploads**. This applies to all image/file fields across all endpoints (`image`, `logo`, `photo`, `hero_image`, `file_base64`, etc.).
 
 ## Table of Contents
 
-1. [Expo Events](#1-expo-events) — list, retrieve (with all nested sub-items), create, update, delete, activate, publish, unpublish
+1. [Expo Events](#1-expo-events) — list, retrieve (with all nested sub-items), create, update, delete, activate, publish, unpublish, list years/editions, manage hero images
 2. [Event Stats](#2-event-stats) — CRUD
 3. [Focus Areas](#3-focus-areas) — CRUD
 4. [Partners](#4-partners) — CRUD with tier filter
@@ -26,6 +26,8 @@ Image and file fields use Django `ImageField`/`FileField` — responses return a
 13. [Media Assets](#13-media-assets) — upload, list, update, delete, media library browser
 14. [Dashboard Metrics](#14-dashboard-metrics) — aggregated stats
 15. [Badge Export](#15-badge-export-csv) — CSV download
+16. [Event Hero Images](#16-event-hero-images) — CRUD
+17. [Village Highlights](#17-village-highlights) — CRUD
 
 ---
 
@@ -57,7 +59,15 @@ Image and file fields use Django `ImageField`/`FileField` — responses return a
       "venue_address": "Ohio Street, Dar es Salaam",
       "venue_lat": -6.8161,
       "venue_lng": 39.2804,
-      "hero_images": ["https://..."],
+      "hero_images": [
+        {
+          "id": "uuid",
+          "image": "http://localhost:8089/media/events/heroes/hero_1.jpg",
+          "order": 1,
+          "created_at": "...",
+          "updated_at": "..."
+        }
+      ],
       "is_active": true,
       "is_published": true,
       "created_at": "...",
@@ -88,7 +98,15 @@ Returns full event with nested `stats`, `focus_areas`, `partners`, `villages`, `
   "venue_address": "Ohio Street",
   "venue_lat": -6.8161,
   "venue_lng": 39.2804,
-  "hero_images": ["https://example.com/hero1.jpg"],
+  "hero_images": [
+    {
+      "id": "uuid",
+      "image": "http://localhost:8089/media/events/heroes/hero_1.jpg",
+      "order": 1,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
   "is_active": true,
   "is_published": true,
   "created_at": "2026-08-28T17:35:39.681724+03:00",
@@ -113,7 +131,7 @@ Returns full event with nested `stats`, `focus_areas`, `partners`, `villages`, `
       "description": "Inspiring talks",
       "accent_color": "#F97316",
       "badge_color": "#EA580C",
-      "image": "/media/events/focus-areas/focus_01.png",
+      "image": "http://localhost:8089/media/events/focus-areas/focus_01.png",
       "order": 1,
       "created_at": "2026-08-28T17:36:00.000000+03:00",
       "updated_at": "2026-08-28T17:36:00.000000+03:00"
@@ -124,7 +142,7 @@ Returns full event with nested `stats`, `focus_areas`, `partners`, `villages`, `
       "id": "ff68812c-0cda-442e-a430-02f3bb5adb17",
       "event": "3df2e41b-1cb8-4d1d-90c2-8042e72abea7",
       "name": "iDEA",
-      "logo": "/media/events/logos/idea.png",
+      "logo": "http://localhost:8089/media/events/logos/idea.png",
       "tier": "HOST",
       "website_url": "",
       "order": 1,
@@ -143,7 +161,7 @@ Returns full event with nested `stats`, `focus_areas`, `partners`, `villages`, `
       "theme_color": "#2563EB",
       "tagline": "Transforming Public Services",
       "description": "Live demos of e-Government platforms...",
-      "hero_image": "/media/events/villages/govtech.png",
+      "hero_image": "http://localhost:8089/media/events/villages/govtech.png",
       "booths_count": 14,
       "demos_count": 8,
       "order": 1
@@ -159,10 +177,11 @@ Returns full event with nested `stats`, `focus_areas`, `partners`, `villages`, `
       "initials": "FH",
       "color": "#1E40AF",
       "accent_light": "#DBEAFE",
-      "photo": "/media/events/speakers/FH.png",
+      "photo": "http://localhost:8089/media/events/speakers/FH.png",
       "bio": "Leading national telecommunication transformation.",
       "order": 1,
-      "is_confirmed": true
+      "is_confirmed": true,
+      "is_approved": true
     }
   ],
   "sessions": [
@@ -311,6 +330,118 @@ Deactivates all other events, activates this one.
 }
 ```
 
+### 1.8 List Years / Editions
+
+`GET /api/admin/expo-events/years/`
+
+Returns all event editions/years ordered by year descending. The current (active) year is flagged with `is_current: true`.
+
+**Response `200`**
+
+```json
+[
+  {
+    "id": "uuid",
+    "year": 2026,
+    "title": "Tanzania DPI Expo 2026",
+    "start_date": "2026-11-18T08:00:00Z",
+    "end_date": "2026-11-19T18:00:00Z",
+    "is_active": true,
+    "is_published": true,
+    "is_current": true
+  },
+  {
+    "id": "uuid",
+    "year": 2025,
+    "title": "Tanzania DPI Expo 2025",
+    "start_date": "2025-11-20T08:00:00Z",
+    "end_date": "2025-11-21T18:00:00Z",
+    "is_active": false,
+    "is_published": true,
+    "is_current": false
+  }
+]
+```
+
+> **Note:** Use `PATCH /api/admin/expo-events/{year}/activate/` to set a year as current — this deactivates all other years.
+
+### 1.9 Manage Hero Images
+
+Add or remove hero images for an event. The `hero_images` array on the ExpoEvent can also be replaced via `PATCH /api/admin/expo-events/{year}/` by passing an array of base64 data URIs or existing paths.
+
+#### Add Hero Image
+
+`POST /api/admin/expo-events/{year}/hero-images/`
+
+**JSON body** (`image_base64` or `image`)
+
+```json
+{
+  "image_base64": "data:image/png;base64,iVBORw0KGgo..."
+}
+```
+
+**Multipart body**
+
+Send `file` field with image.
+
+**Response `201`**
+
+```json
+{
+  "message": "Hero image added.",
+  "hero_image": {
+    "id": "uuid",
+    "image": "http://localhost:8089/media/events/heroes/hero_1.jpg",
+    "order": 1,
+    "created_at": "...",
+    "updated_at": "..."
+  }
+}
+```
+
+#### Remove Hero Image(s)
+
+`DELETE /api/admin/expo-events/{year}/hero-images/`
+
+Accepts one or multiple by `id`(s) or `url`/`path`.
+
+**By id(s)**
+
+```json
+{
+  "ids": ["uuid-1", "uuid-2"]
+}
+```
+
+**By url(s)**
+
+```json
+{
+  "urls": ["http://localhost:8089/media/events/heroes/hero_2.jpg"]
+}
+```
+
+> **Note:** You can also use `path`, `paths`, `images`, `url`, or `id` keys.
+
+**Response `200`**
+
+```json
+{
+  "message": "Removed 2 hero image(s).",
+  "removed": ["uuid-1", "uuid-2"],
+  "hero_images": [
+    {
+      "id": "uuid",
+      "image": "http://localhost:8089/media/events/heroes/hero_1.jpg",
+      "order": 1,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ]
+}
+```
+
 ---
 
 ## 2. Event Stats
@@ -391,7 +522,7 @@ Deactivates all other events, activates this one.
       "description": "Inspiring talks",
       "accent_color": "#F97316",
       "badge_color": "#EA580C",
-      "image": "/media/events/focus-areas/focus_01.png",
+      "image": "http://localhost:8089/media/events/focus-areas/focus_01.png",
       "order": 1,
       "created_at": "...",
       "updated_at": "..."
@@ -415,7 +546,7 @@ Deactivates all other events, activates this one.
 }
 ```
 
-> **Note:** `image` is an `ImageField` — accepts base64 data URI on create/update, returns file URL in responses.
+> **Note:** `image` is an `ImageField` — accepts base64 data URI on create/update, returns absolute file URL in responses.
 
 ---
 
@@ -446,7 +577,7 @@ Deactivates all other events, activates this one.
       "id": "uuid",
       "event": "uuid",
       "name": "iDEA",
-      "logo": "/media/events/logos/idea.png",
+      "logo": "http://localhost:8089/media/events/logos/idea.png",
       "tier": "HOST",
       "website_url": "https://...",
       "order": 1,
@@ -470,7 +601,7 @@ Deactivates all other events, activates this one.
 }
 ```
 
-> **Note:** `logo` is an `ImageField` — accepts base64 data URI on create/update, returns file URL in responses.
+> **Note:** `logo` is an `ImageField` — accepts base64 data URI on create/update, returns absolute file URL in responses.
 
 ---
 
@@ -500,7 +631,7 @@ Deactivates all other events, activates this one.
       "theme_color": "#2563EB",
       "tagline": "Transforming Public Services",
       "description": "...",
-      "hero_image": "/media/events/villages/govtech.png",
+      "hero_image": "http://localhost:8089/media/events/villages/govtech.png",
       "booths_count": 14,
       "demos_count": 8,
       "order": 1
@@ -523,15 +654,16 @@ Deactivates all other events, activates this one.
   "theme_color": "#2563EB",
   "tagline": "Transforming Public Services",
   "description": "...",
+  "why_visit": "...",
   "hero_image": "data:image/png;base64,iVBOR...",
   "stats": [{ "label": "Agencies", "value": "14+" }],
   "order": 1
 }
 ```
 
-> **Note:** `hero_image` is an `ImageField` — accepts base64 data URI on create/update, returns file URL in responses.
+> **Note:** `hero_image` is an `ImageField` — accepts base64 data URI on create/update, returns absolute file URL in responses.
 
-### 5.3 Retrieve Village (with nested booths, schedule, gallery)
+### 5.3 Retrieve Village (with nested booths, schedule, gallery, highlights)
 
 `GET /api/admin/villages/{slug}/`
 
@@ -546,7 +678,8 @@ Deactivates all other events, activates this one.
   "theme_color": "#2563EB",
   "tagline": "...",
   "description": "...",
-  "hero_image": "/media/events/villages/govtech.png",
+  "why_visit": "...",
+  "hero_image": "http://localhost:8089/media/events/villages/govtech.png",
   "stats": [{ "label": "Agencies", "value": "14+" }],
   "booths": [
     {
@@ -559,7 +692,7 @@ Deactivates all other events, activates this one.
       "description": "Interoperability middleware.",
       "live_demo": "10:30 AM — Live Demo",
       "website_url": "https://...",
-      "logo": "/media/events/booth-logos/govtech_booth_1.png",
+      "logo": "http://localhost:8089/media/events/booth-logos/govtech_booth_1.png",
       "is_featured": true,
       "order": 1
     }
@@ -580,10 +713,20 @@ Deactivates all other events, activates this one.
     {
       "id": "uuid",
       "village": "uuid",
-      "image": "/media/events/gallery/govtech_gallery_1.png",
+      "image": "http://localhost:8089/media/events/gallery/govtech_gallery_1.png",
       "title": "Citizen Portal Showcase",
       "caption": "One-stop government services",
       "edition_year": 2026,
+      "order": 1
+    }
+  ],
+  "highlights": [
+    {
+      "id": "uuid",
+      "village": "uuid",
+      "icon": "smart_display",
+      "title": "Live Production Demos",
+      "description": "Experience hands-on workflows running on real infrastructure testbeds.",
       "order": 1
     }
   ],
@@ -626,7 +769,7 @@ Deactivates all other events, activates this one.
       "description": "Interoperability middleware.",
       "live_demo": "10:30 AM — Live Demo",
       "website_url": "https://...",
-      "logo": "/media/events/booth-logos/govtech_booth_1.png",
+      "logo": "http://localhost:8089/media/events/booth-logos/govtech_booth_1.png",
       "is_featured": true,
       "order": 1
     }
@@ -652,7 +795,7 @@ Deactivates all other events, activates this one.
 }
 ```
 
-> **Note:** `logo` is an `ImageField` — accepts base64 data URI on create/update, returns file URL in responses.
+> **Note:** `logo` is an `ImageField` — accepts base64 data URI on create/update, returns absolute file URL in responses.
 
 ---
 
@@ -727,7 +870,7 @@ Deactivates all other events, activates this one.
     {
       "id": "uuid",
       "village": "uuid",
-      "image": "/media/events/gallery/govtech_gallery_1.png",
+      "image": "http://localhost:8089/media/events/gallery/govtech_gallery_1.png",
       "title": "Citizen Portal Showcase",
       "caption": "One-stop government services",
       "edition_year": 2026,
@@ -750,7 +893,7 @@ Deactivates all other events, activates this one.
 }
 ```
 
-> **Note:** `image` is an `ImageField` — accepts base64 data URI on create/update, returns file URL in responses.
+> **Note:** `image` is an `ImageField` — accepts base64 data URI on create/update, returns absolute file URL in responses.
 
 ---
 
@@ -937,6 +1080,61 @@ Deactivates all other events, activates this one.
 **Registration status values:** `CONFIRMED`, `PENDING_REVIEW`, `APPROVED`, `WAITLIST`, `REJECTED`  
 **Registration type values:** `GUEST`, `SPEAKER`, `VOLUNTEER`
 
+### 10.3 Approve Registration
+
+`POST /api/admin/registrations/{id}/approve/`
+
+Approves the registration. For `SPEAKER` type, it also creates a new `Speaker` record (confirmed) and returns it.
+
+**Response `200`**
+
+```json
+{
+  "message": "Registration approved.",
+  "registration": {
+    "id": "uuid",
+    "reference_no": "TZ-DPI-SPE-041C0A9D",
+    "type": "SPEAKER",
+    "first_name": "Miriam",
+    "last_name": "Griffin",
+    "status": "APPROVED",
+    ...
+  },
+  "speaker": {
+    "id": "uuid",
+    "event": "uuid",
+    "name": "Miriam Griffin",
+    "title": "Quis esse atque quae",
+    "org": "Merritt Green LLC",
+    "initials": "MG",
+    "color": "#2563EB",
+    "accent_light": "#DBEAFE",
+    "photo": null,
+    "bio": "Incididunt voluptate",
+    "order": 6,
+    "is_confirmed": true,
+    "is_approved": true
+  }
+}
+```
+
+### 10.4 Reject Registration
+
+`POST /api/admin/registrations/{id}/reject/`
+
+**Response `200`**
+
+```json
+{
+  "message": "Registration rejected.",
+  "registration": {
+    "id": "uuid",
+    "status": "REJECTED",
+    ...
+  }
+}
+```
+
 ---
 
 ## 11. Speakers
@@ -969,10 +1167,11 @@ Deactivates all other events, activates this one.
       "initials": "FH",
       "color": "#1E40AF",
       "accent_light": "#DBEAFE",
-      "photo": "/media/events/speakers/FH.png",
+      "photo": "http://localhost:8089/media/events/speakers/FH.png",
       "bio": "Leading national telecommunication transformation.",
       "order": 1,
-      "is_confirmed": true
+      "is_confirmed": true,
+      "is_approved": true
     }
   ]
 }
@@ -996,7 +1195,23 @@ Deactivates all other events, activates this one.
 }
 ```
 
-> **Note:** `photo` is an `ImageField` — accepts base64 data URI on create/update, returns file URL in responses.
+> **Note:** `photo` is an `ImageField` — accepts base64 data URI on create/update, returns absolute file URL in responses.
+
+### 11.2 Approve Speaker
+
+`POST /api/admin/speakers/{id}/approve/`
+
+Sets `is_confirmed`/`is_approved` to `true` for an existing speaker.
+
+**Response `200`** — the updated `Speaker` object.
+
+### 11.3 Unconfirm Speaker
+
+`POST /api/admin/speakers/{id}/unconfirm/`
+
+Sets `is_confirmed`/`is_approved` to `false` for an existing speaker.
+
+**Response `200`** — the updated `Speaker` object.
 
 ---
 
@@ -1038,7 +1253,7 @@ Deactivates all other events, activates this one.
         "initials": "FH",
         "color": "#1E40AF",
         "accent_light": "#DBEAFE",
-        "photo": "/media/events/speakers/FH.png",
+        "photo": "http://localhost:8089/media/events/speakers/FH.png",
         "bio": "...",
         "order": 1,
         "is_confirmed": true
@@ -1119,7 +1334,7 @@ Supports **base64-encoded** file uploads via JSON. The `file_base64` field accep
   "size_bytes": 1420580,
   "sizeBytes": 1420580,
   "folder": "gallery",
-  "file": "/media/events/media/upload_a1b2c3d4.png",
+  "file": "http://localhost:8089/media/events/media/upload_a1b2c3d4.png",
   "thumbnail": null,
   "alt_text": "GovTech Village keynote stage",
   "alt_text_read": "GovTech Village keynote stage",
@@ -1132,7 +1347,7 @@ Supports **base64-encoded** file uploads via JSON. The `file_base64` field accep
 }
 ```
 
-> **Note:** `file_base64` accepts base64 data URIs (`data:image/...;base64,...`). The `file` and `thumbnail` fields in the response are Django `FileField`/`ImageField` URLs pointing to the filesystem. Image dimensions (`width`, `height`, `dimensions`) are automatically extracted on upload.
+> **Note:** `file_base64` accepts base64 data URIs (`data:image/...;base64,...`). The `file` and `thumbnail` fields in the response are Django `FileField`/`ImageField` absolute URLs pointing to the filesystem. Image dimensions (`width`, `height`, `dimensions`) are automatically extracted on upload.
 
 ### 13.2 Upload File (Multipart)
 
@@ -1172,7 +1387,7 @@ Also supports traditional multipart file uploads. Use `file_base64` as the multi
       "mime_type": "image/jpeg",
       "size_bytes": 1420580,
       "folder": "gallery",
-      "file": "/media/events/gallery/photo.jpg",
+      "file": "http://localhost:8089/media/events/gallery/photo.jpg",
       "thumbnail": null,
       "alt_text": "Caption",
       "width": null,
@@ -1183,7 +1398,7 @@ Also supports traditional multipart file uploads. Use `file_base64` as the multi
 }
 ```
 
-> **Note:** Query params use camelCase (`eventId`). Response fields `file` and `thumbnail` are Django `FileField`/`ImageField` URLs.
+> **Note:** Query params use camelCase (`eventId`). Response fields `file` and `thumbnail` are Django `FileField`/`ImageField` absolute URLs.
 
 ---
 
@@ -1231,4 +1446,99 @@ Also supports traditional multipart file uploads. Use `file_base64` as the multi
 ```
 RefNo,Name,Email,Organization,Category,BadgeCode,Status
 TZ-DPI-GUE-BB20C79C,John Doe,john@example.com,Test Org,GUEST,QR-TZ-DPI-GUE-BB20C79C,CONFIRMED
+```
+
+---
+
+## 16. Event Hero Images
+
+### 16.1 List / Create / Update / Delete
+
+| Method   | Path                                         |
+| -------- | -------------------------------------------- |
+| `GET`    | `/api/admin/event-hero-images/?event={uuid}` |
+| `POST`   | `/api/admin/event-hero-images/`              |
+| `GET`    | `/api/admin/event-hero-images/{id}/`         |
+| `PATCH`  | `/api/admin/event-hero-images/{id}/`         |
+| `DELETE` | `/api/admin/event-hero-images/{id}/`         |
+
+**Filter:** `?event={uuid}`
+
+**List response `200`** (paginated)
+
+```json
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "uuid",
+      "image": "http://localhost:8089/media/events/heroes/hero_1.jpg",
+      "order": 1,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ]
+}
+```
+
+**Create body**
+
+```json
+{
+  "event": "uuid",
+  "image": "data:image/png;base64,iVBOR...",
+  "order": 1
+}
+```
+
+> **Note:** `image` is an `ImageField` — accepts base64 data URI on create/update, returns absolute file URL in responses. The `event` field is write-only.
+
+---
+
+## 17. Village Highlights
+
+### 17.1 List / Create / Update / Delete
+
+| Method   | Path                                            |
+| -------- | ----------------------------------------------- |
+| `GET`    | `/api/admin/village-highlights/?village={uuid}` |
+| `POST`   | `/api/admin/village-highlights/`                |
+| `GET`    | `/api/admin/village-highlights/{id}/`           |
+| `PATCH`  | `/api/admin/village-highlights/{id}/`           |
+| `DELETE` | `/api/admin/village-highlights/{id}/`           |
+
+**Filter:** `?village={uuid}`
+
+**List response `200`** (paginated)
+
+```json
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "uuid",
+      "village": "uuid",
+      "icon": "smart_display",
+      "title": "Live Production Demos",
+      "description": "Experience hands-on workflows running on real infrastructure testbeds.",
+      "order": 1
+    }
+  ]
+}
+```
+
+**Create body**
+
+```json
+{
+  "village": "uuid",
+  "icon": "smart_display",
+  "title": "Live Production Demos",
+  "description": "Experience hands-on workflows running on real infrastructure testbeds.",
+  "order": 1
+}
 ```

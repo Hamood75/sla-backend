@@ -3,6 +3,8 @@
 All public endpoints are open (no auth required).  
 Base URL: `/api/events/`
 
+All image and file fields return **absolute URLs** (e.g. `"http://localhost:8089/media/events/villages/govtech.png"`) pointing to files stored via Django `ImageField`/`FileField`.
+
 ---
 
 ## 1. Landing Page
@@ -22,6 +24,7 @@ Returns aggregated data for the event landing page: active + published event, st
       "year": 2026,
       "title": "Tanzania DPI Expo 2026",
       "tagline": "Building Digital Foundation",
+      "description": "# Two Days of Innovation...",
       "startDate": "2026-11-18T11:00:00+03:00",
       "endDate": "2026-11-19T21:00:00+03:00",
       "venue": {
@@ -30,7 +33,15 @@ Returns aggregated data for the event landing page: active + published event, st
         "latitude": -6.8161,
         "longitude": 39.2804
       },
-      "heroImages": ["https://..."]
+      "heroImages": [
+        {
+          "id": "uuid",
+          "image": "http://localhost:8089/media/events/heroes/hero_1.jpg",
+          "order": 1,
+          "created_at": "...",
+          "updated_at": "..."
+        }
+      ]
     },
     "stats": [{ "label": "Speakers", "value": "50+" }],
     "villages": [
@@ -41,7 +52,7 @@ Returns aggregated data for the event landing page: active + published event, st
         "hall": "Hall A",
         "emoji": "🏛️",
         "color": "#2563EB",
-        "img": "https://...",
+        "img": "http://localhost:8089/media/events/villages/govtech.png",
         "desc": "Live demos of e-Government platforms...",
         "booths": 14,
         "demos": 8,
@@ -51,7 +62,7 @@ Returns aggregated data for the event landing page: active + published event, st
     "gallery": [
       {
         "id": "uuid",
-        "url": "https://...",
+        "url": "http://localhost:8089/media/events/gallery/govtech_gallery_1.png",
         "title": "Photo",
         "layout": "standard"
       }
@@ -64,14 +75,14 @@ Returns aggregated data for the event landing page: active + published event, st
         "desc": "Inspiring talks",
         "accentColor": "#F97316",
         "badgeColor": "#EA580C",
-        "img": "https://..."
+        "img": "http://localhost:8089/media/events/focus-areas/focus_01.png"
       }
     ],
     "partners": [
       {
         "id": "uuid",
         "name": "iDEA",
-        "logo": "https://..."
+        "logo": "http://localhost:8089/media/events/logos/idea.png"
       }
     ],
     "featuredSpeakers": [
@@ -83,7 +94,7 @@ Returns aggregated data for the event landing page: active + published event, st
         "initials": "FH",
         "color": "#1E40AF",
         "accentLight": "#DBEAFE",
-        "photo": "https://...",
+        "photo": "http://localhost:8089/media/events/speakers/FH.png",
         "bio": "Leading national telecommunication transformation.",
         "order": 1
       }
@@ -103,7 +114,47 @@ Returns aggregated data for the event landing page: active + published event, st
 
 ---
 
-## 2. Villages List
+## 2. Event Editions
+
+`GET /api/events/editions/`
+
+Returns all published event editions/years, ordered by year descending. The current (active) year is flagged with `is_current: true`. `current_year` at the top level indicates the active year (or `null` if none active).
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "count": 2,
+  "current_year": 2026,
+  "editions": [
+    {
+      "id": "uuid",
+      "year": 2026,
+      "title": "Tanzania DPI Expo 2026",
+      "tagline": "Building Digital Foundation",
+      "start_date": "2026-11-18T08:00:00Z",
+      "end_date": "2026-11-19T18:00:00Z",
+      "venue_name": "Diamond Jubilee Hall",
+      "is_current": true
+    },
+    {
+      "id": "uuid",
+      "year": 2025,
+      "title": "Tanzania DPI Expo 2025",
+      "tagline": "Digital Transformation in Action",
+      "start_date": "2025-11-20T08:00:00Z",
+      "end_date": "2025-11-21T18:00:00Z",
+      "venue_name": "Diamond Jubilee Hall",
+      "is_current": false
+    }
+  ]
+}
+```
+
+---
+
+## 3. Villages List
 
 `GET /api/events/{year}/villages/`
 
@@ -125,7 +176,7 @@ Returns all villages for a published event, ordered by `order`.
       "themeColor": "#2563EB",
       "tagline": "Transforming Public Services",
       "desc": "Live demos of e-Government platforms...",
-      "heroImage": "https://...",
+      "heroImage": "http://localhost:8089/media/events/villages/govtech.png",
       "boothsCount": 14,
       "demosCount": 8,
       "order": 1
@@ -136,11 +187,11 @@ Returns all villages for a published event, ordered by `order`.
 
 ---
 
-## 3. Village Detail
+## 4. Village Detail
 
 `GET /api/events/{year}/villages/{slug}/`
 
-Returns full village details with nested booths, schedule, and gallery.
+Returns full village details with nested booths, schedule, gallery, whyVisit, and keyHighlights.
 
 **Response `200`**
 
@@ -156,7 +207,17 @@ Returns full village details with nested booths, schedule, and gallery.
     "themeColor": "#2563EB",
     "tagline": "Transforming Public Services",
     "description": "...",
-    "heroImage": "https://...",
+    "whyVisit": "...",
+    "keyHighlights": [
+      {
+        "id": "uuid",
+        "icon": "smart_display",
+        "title": "Live Production Demos",
+        "description": "Experience hands-on workflows running on real infrastructure testbeds.",
+        "order": 1
+      }
+    ],
+    "heroImage": "http://localhost:8089/media/events/villages/govtech.png",
     "stats": [{ "label": "Participating Agencies", "value": "14+" }],
     "booths": [
       {
@@ -168,7 +229,7 @@ Returns full village details with nested booths, schedule, and gallery.
         "desc": "Interoperability middleware.",
         "liveDemo": "10:30 AM — Live Demo",
         "websiteUrl": "https://...",
-        "logoUrl": "https://...",
+        "logoUrl": "http://localhost:8089/media/events/booth-logos/govtech_booth_1.png",
         "isFeatured": true
       }
     ],
@@ -184,7 +245,7 @@ Returns full village details with nested booths, schedule, and gallery.
     "gallery": [
       {
         "id": "uuid",
-        "url": "https://...",
+        "url": "http://localhost:8089/media/events/gallery/govtech_gallery_1.png",
         "title": "Citizen Portal Showcase",
         "caption": "One-stop government services"
       }
@@ -198,7 +259,7 @@ Returns full village details with nested booths, schedule, and gallery.
 
 ---
 
-## 4. Speakers
+## 5. Speakers
 
 `GET /api/events/{year}/speakers/`
 
@@ -219,7 +280,7 @@ Returns confirmed speakers for a published event, ordered by `order`.
       "initials": "FH",
       "color": "#1E40AF",
       "accentLight": "#DBEAFE",
-      "photo": "https://...",
+      "photo": "http://localhost:8089/media/events/speakers/FH.png",
       "bio": "Leading national telecommunication transformation.",
       "order": 1
     }
@@ -229,7 +290,7 @@ Returns confirmed speakers for a published event, ordered by `order`.
 
 ---
 
-## 5. Schedule
+## 6. Schedule
 
 `GET /api/events/{year}/schedule/`
 
@@ -281,7 +342,7 @@ Returns the conference schedule grouped by day.
 
 ---
 
-## 6. Guest Registration
+## 7. Guest Registration
 
 `POST /api/events/{year}/register/guest/`
 
@@ -324,7 +385,7 @@ Returns the conference schedule grouped by day.
 
 ---
 
-## 7. Speaker Registration
+## 8. Speaker Registration
 
 `POST /api/events/{year}/register/speaker/`
 
@@ -370,7 +431,7 @@ Returns the conference schedule grouped by day.
 
 ---
 
-## 8. Volunteer Registration
+## 9. Volunteer Registration
 
 `POST /api/events/{year}/register/volunteer/`
 
@@ -415,7 +476,7 @@ Returns the conference schedule grouped by day.
 
 ---
 
-## 9. Booth Registration
+## 10. Booth Registration
 
 `POST /api/events/{year}/register/booth/`
 

@@ -1,15 +1,16 @@
 import io
+import urllib.request
 import uuid
 
 from django.core.management.base import BaseCommand
 from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
 from PIL import Image
 
 from events.models import (
     BoothApplication,
     EventStat,
     ExpoEvent,
+    ExpoEventHeroImage,
     ExpoVillage,
     FocusArea,
     MediaAsset,
@@ -23,17 +24,79 @@ from events.models import (
 )
 
 
-def make_image_file(width, height, color):
-    """Generate a PNG image and return a ContentFile ready for ImageField."""
+def fetch_image(url):
+    """Download an image from URL and return raw bytes."""
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return resp.read()
+
+
+import io
+import urllib.request
+import uuid
+
+from PIL import Image
+from django.core.files.base import ContentFile
+
+
+def fetch_image(url):
+    """Download an image from URL and return raw bytes."""
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return resp.read()
+
+
+def generate_placeholder(width, height, seed):
+    """Generate a solid-color PNG when network is unavailable."""
+    colors = ['#1E40AF', '#2563EB', '#059669', '#F97316', '#DC2626', '#7C3AED', '#0891B2']
+    color = colors[abs(hash(seed)) % len(colors)]
     img = Image.new('RGB', (width, height), color=color)
     buf = io.BytesIO()
     img.save(buf, format='PNG')
-    name = f'seed_{uuid.uuid4().hex[:8]}.png'
-    return ContentFile(buf.getvalue(), name=name)
+    return buf.getvalue()
+
+
+def make_image_file(width, height, seed):
+    """Download a real image or fall back to a generated placeholder."""
+    url = f'https://picsum.photos/seed/{seed}/{width}/{height}'
+    try:
+        data = fetch_image(url)
+        ext = 'jpg'
+    except Exception:
+        data = generate_placeholder(width, height, seed)
+        ext = 'png'
+    name = f'seed_{uuid.uuid4().hex[:8]}_{seed}.{ext}'
+    return ContentFile(data, name=name)
+
+
+def make_logo_file(seed):
+    """Download a real logo-style image or fall back to a generated placeholder."""
+    url = f'https://picsum.photos/seed/{seed}/400/200'
+    try:
+        data = fetch_image(url)
+        ext = 'jpg'
+    except Exception:
+        data = generate_placeholder(400, 200, seed)
+        ext = 'png'
+    name = f'seed_{seed}.{ext}'
+    return ContentFile(data, name=name)
+
+
+def make_photo_file(seed):
+    """Download a real portrait-style image or fall back to a generated placeholder."""
+    url = f'https://picsum.photos/seed/{seed}/400/400'
+    try:
+        data = fetch_image(url)
+        ext = 'jpg'
+    except Exception:
+        data = generate_placeholder(400, 400, seed)
+        ext = 'png'
+    name = f'seed_{seed}.{ext}'
+    return ContentFile(data, name=name)
 
 
 class Command(BaseCommand):
-    help = 'Seed expo event data with generated placeholder images'
+    help = 'Seed expo event data with real images from the internet'
 
     def handle(self, *args, **options):
         self.stdout.write('Seeding expo events data...')
@@ -47,22 +110,56 @@ class Command(BaseCommand):
             year=2026,
             title='Tanzania DPI Expo 2026',
             tagline='Building Digital Foundation',
-            description=(
-                'The Tanzania DPI Expo 2026 brings together government agencies, '
-                'private sector leaders, and innovators to showcase and advance '
-                'Digital Public Infrastructure across East Africa.'
-            ),
+            description='''# Two Days of Innovation, Dialogue & Partnership
+
+Tanzania DPI Expo 2026 is the premier national event bringing together the brightest minds in digital infrastructure, technology, policy, and innovation. Hosted in the heart of Dar es Salaam, the expo creates a dynamic space for dialogue, demonstration, and deal-making around Digital Public Infrastructure (DPI).
+
+The event will feature keynote addresses from government leaders and global experts, an expansive exhibition floor showcasing Tanzania's most innovative digital solutions, interactive workshops, expert panels, and extensive networking opportunities.
+
+## What to Expect
+
+- check Keynote speeches from national and international digital leaders
+- check Exhibition floor with 30+ technology showcases
+- check Structured networking sessions and B2B meetings
+- check Youth Innovation Challenge presentations
+- check Workshops on digital identity, health, finance, and AI
+- check Signing of MOUs and partnership agreements
+
+## Event Details
+
+- calendar_today Date: 18 – 19 November 2026
+- access_time Time: 09:00 AM – 05:00 PM EAT
+- location_on Venue: Diamond Jubilee, Dar es Salaam
+- language Languages: English & Swahili
+- confirmation_number Entry: Free (Registration Required)
+''',
             start_date='2026-11-18T11:00:00+03:00',
             end_date='2026-11-19T21:00:00+03:00',
             venue_name='Diamond Jubilee Hall',
             venue_address='Ohio Street, Dar es Salaam',
             venue_lat=-6.8161,
             venue_lng=39.2804,
-            hero_images=[default_storage.save(f'events/heroes/seed_{uuid.uuid4().hex[:8]}.png', make_image_file(1920, 600, '#1E40AF'))],
             is_active=True,
             is_published=True,
         )
         self.stdout.write(f'  Created event: {event.title}')
+
+        # --- Hero Images ---
+        hero_urls = [
+            'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1800&auto=format&fit=crop&q=80',
+            'https://images.unsplash.com/photo-1551818255-e6e10975bc17?w=1800&auto=format&fit=crop&q=80',
+            'https://images.unsplash.com/photo-1591115765373-5207764f72e7?w=1800&auto=format&fit=crop&q=80',
+        ]
+        for i, url in enumerate(hero_urls, start=1):
+            try:
+                data = fetch_image(url)
+                ext = 'jpg'
+            except Exception:
+                data = generate_placeholder(1800, 600, f'hero-{i}')
+                ext = 'png'
+            img = ContentFile(data, name=f'hero_{i}.{ext}')
+            ExpoEventHeroImage.objects.create(event=event, image=img, order=i)
+        self.stdout.write(f'  Created {len(hero_urls)} hero images')
 
         # --- Event Stats ---
         stats_data = [
@@ -88,7 +185,7 @@ class Command(BaseCommand):
                 accent_color=accent, badge_color=badge,
                 order=int(num),
             )
-            fa.image.save(f'focus_{num}.png', make_image_file(800, 600, accent), save=False)
+            fa.image.save(f'focus_{num}.jpg', make_image_file(800, 600, f'focus-{num}'), save=False)
             fa.save()
         self.stdout.write(f'  Created {len(focus_areas_data)} focus areas')
 
@@ -106,7 +203,7 @@ class Command(BaseCommand):
                 website_url=f'https://example.com/{name.lower().replace(" ", "-")}',
                 order=partners_data.index((name, tier, color)) + 1,
             )
-            p.logo.save(f'{name.lower().replace(" ", "_")}.png', make_image_file(400, 200, color), save=False)
+            p.logo.save(f'{name.lower().replace(" ", "_")}.jpg', make_logo_file(f'logo-{name.lower().replace(" ", "-")}'), save=False)
             p.save()
         self.stdout.write(f'  Created {len(partners_data)} partners')
 
@@ -140,7 +237,7 @@ class Command(BaseCommand):
                 stats=[{'label': 'Booths', 'value': f'{10+i}'}, {'label': 'Demos', 'value': f'{5+i}'}],
                 order=i,
             )
-            village.hero_image.save(f'{slug}.png', make_image_file(1200, 400, color), save=False)
+            village.hero_image.save(f'{slug}.jpg', make_image_file(1200, 400, f'village-{slug}'), save=False)
             village.save()
             villages[slug] = village
         self.stdout.write(f'  Created {len(villages_data)} villages')
@@ -172,7 +269,7 @@ class Command(BaseCommand):
                     website_url=f'https://example.com/{slug}/{j}',
                     is_featured=featured, order=j,
                 )
-                booth.logo.save(f'{slug}_booth_{j}.png', make_image_file(300, 150, villages[slug].theme_color), save=False)
+                booth.logo.save(f'{slug}_booth_{j}.jpg', make_logo_file(f'booth-{slug}-{j}'), save=False)
                 booth.save()
                 booth_count += 1
         self.stdout.write(f'  Created {booth_count} village booths')
@@ -218,7 +315,7 @@ class Command(BaseCommand):
                     title=title, caption=caption,
                     edition_year=year, order=j,
                 )
-                vg.image.save(f'{slug}_gallery_{j}.png', make_image_file(800, 600, villages[slug].theme_color), save=False)
+                vg.image.save(f'{slug}_gallery_{j}.jpg', make_image_file(800, 600, f'gallery-{slug}-{j}'), save=False)
                 vg.save()
                 gallery_count += 1
         self.stdout.write(f'  Created {gallery_count} village gallery items')
@@ -239,7 +336,7 @@ class Command(BaseCommand):
                 bio=f'{name} is a leading expert in digital infrastructure.',
                 order=i, is_confirmed=True,
             )
-            speaker.photo.save(f'{initials}.png', make_image_file(400, 400, color), save=False)
+            speaker.photo.save(f'{initials}.jpg', make_photo_file(f'speaker-{initials}'), save=False)
             speaker.save()
             speakers.append(speaker)
         self.stdout.write(f'  Created {len(speakers_data)} speakers')
@@ -319,19 +416,19 @@ class Command(BaseCommand):
 
         # --- Media Assets ---
         media_data = [
-            ('heroes', 'Hero Banner', '#1E40AF', 1920, 600),
-            ('speakers', 'Speaker Photo', '#059669', 400, 400),
-            ('villages', 'Village Hero', '#F97316', 1200, 400),
-            ('gallery', 'Gallery Photo', '#7C3AED', 800, 600),
-            ('logos', 'Partner Logo', '#DC2626', 400, 200),
+            ('heroes', 'Hero Banner', 'hero-banner', 1920, 600),
+            ('speakers', 'Speaker Photo', 'speaker-photo', 400, 400),
+            ('villages', 'Village Hero', 'village-hero', 1200, 400),
+            ('gallery', 'Gallery Photo', 'gallery-photo', 800, 600),
+            ('logos', 'Partner Logo', 'partner-logo', 400, 200),
         ]
-        for folder, alt, color, w, h in media_data:
-            img_file = make_image_file(w, h, color)
+        for folder, alt, seed, w, h in media_data:
+            img_file = make_image_file(w, h, f'media-{seed}')
             asset = MediaAsset(
                 event=event,
                 original_name=img_file.name,
                 file_name=img_file.name,
-                mime_type='image/png',
+                mime_type='image/jpeg',
                 size_bytes=img_file.size,
                 folder=folder,
                 alt_text=alt,
