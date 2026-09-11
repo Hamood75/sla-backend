@@ -1,6 +1,5 @@
 import uuid
 
-from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
 
@@ -242,9 +241,7 @@ class BoothApplication(TimeStampedModel):
     booth_package = models.CharField(max_length=100)
     showcase_title = models.CharField(max_length=255)
     showcase_desc = models.TextField()
-    tech_requirements = ArrayField(
-        models.CharField(max_length=200), default=list, blank=True
-    )
+    tech_requirements = models.JSONField(default=list, blank=True)
     co_exhibitors = models.TextField(blank=True)
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
