@@ -64,7 +64,11 @@ seed:
 	$(MANAGE) seed_platform
 
 ensure-connect-qr:
-	$(MANAGE) ensure_connect_qr
+	@if $(COMPOSE) ps --status running 2>/dev/null | grep -q "$(APP)"; then \
+		$(COMPOSE) exec $(APP) python manage.py ensure_connect_qr; \
+	else \
+		$(MANAGE) ensure_connect_qr; \
+	fi
 
 superuser:
 	$(MANAGE) createsuperuser
