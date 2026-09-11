@@ -801,9 +801,12 @@ Accepts one or multiple by `id`(s) or `url`/`path`.
 
 ## 7. Village Schedules
 
+Village-specific demo schedules.
+
 | Method   | Path                                                        |
 | -------- | ----------------------------------------------------------- |
 | `GET`    | `/api/admin/village-schedules/?village={uuid}&day_number=1` |
+| `GET`    | `/api/admin/village-schedules/{id}/`                        |
 | `POST`   | `/api/admin/village-schedules/`                             |
 | `PATCH`  | `/api/admin/village-schedules/{id}/`                        |
 | `DELETE` | `/api/admin/village-schedules/{id}/`                        |
@@ -1217,11 +1220,14 @@ Sets `is_confirmed`/`is_approved` to `false` for an existing speaker.
 
 ## 12. Sessions
 
+Event-wide conference sessions (keynotes, panels, workshops, breaks, exhibitions).
+
 ### 12.1 List / Create / Update / Delete
 
 | Method   | Path                                                          |
 | -------- | ------------------------------------------------------------- |
 | `GET`    | `/api/admin/sessions/?event={uuid}&day_number=1&type=KEYNOTE` |
+| `GET`    | `/api/admin/sessions/{id}/`                                   |
 | `POST`   | `/api/admin/sessions/`                                        |
 | `PATCH`  | `/api/admin/sessions/{id}/`                                   |
 | `DELETE` | `/api/admin/sessions/{id}/`                                   |

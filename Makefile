@@ -9,8 +9,14 @@ DB = db
 IMAGE ?= streetlabsafrica/sla-backend:latest
 PORT ?= 8000
 
-# Prefer project venv when present
-PYTHON := $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; elif [ -x venv/bin/python ]; then echo venv/bin/python; else echo python3; fi)
+# Use project venv
+PYTHON := env/bin/python
+
+# Guard: fail with a clear message if the venv is missing
+ifeq ("$(wildcard $(PYTHON))","")
+$(error "$(PYTHON) not found. Run: python3 -m venv env && env/bin/pip install -r requirements.txt")
+endif
+
 MANAGE := $(PYTHON) manage.py
 
 help:
