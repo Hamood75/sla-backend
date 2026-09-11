@@ -1,7 +1,7 @@
 # Makefile for Street Labs Africa backend
 # Local dev + Docker compose helpers
 
-.PHONY: help run run-docker build up up-logs down logs shell shell-db migrate migrations seed superuser test static clean deploy release push ensure-connect-qr
+.PHONY: help setup run run-docker build up up-logs down logs shell shell-db migrate migrations seed superuser test static clean deploy release push ensure-connect-qr
 
 COMPOSE := $(shell if docker compose version >/dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi)
 APP = web
@@ -12,15 +12,19 @@ PORT ?= 8000
 # Use project venv
 PYTHON := env/bin/python
 
-# Guard: fail with a clear message if the venv is missing
+# Guard: fail if venv missing, but allow help and setup targets
+PYTHON_NEEDED := $(filter-out help setup,$(MAKECMDGOALS))
+ifneq ($(PYTHON_NEEDED),)
 ifeq ("$(wildcard $(PYTHON))","")
-$(error "$(PYTHON) not found. Run: python3 -m venv env && env/bin/pip install -r requirements.txt")
+$(error "$(PYTHON) not found. Run: make setup")
+endif
 endif
 
 MANAGE := $(PYTHON) manage.py
 
 help:
 	@echo "Available targets:"
+	@echo "  setup             - Create env and install requirements"
 	@echo "  run               - Start Django locally on :$(PORT)"
 	@echo "  migrate           - Run migrations (local, or Docker if containers are up)"
 	@echo "  migrations        - Make migrations (local)"
@@ -36,6 +40,10 @@ help:
 	@echo "  shell             - Shell in web container"
 	@echo "  deploy            - Build/start Docker + migrate"
 	@echo "  release / push    - Build and push Docker image"
+
+setup:
+	python3 -m venv --clear env
+	env/bin/pip install -r requirements.txt
 
 run:
 	$(MANAGE) runserver 0.0.0.0:$(PORT)
