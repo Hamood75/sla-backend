@@ -338,6 +338,24 @@ class Command(BaseCommand):
                 slug='c28lmn',
             )
 
+        from django.conf import settings as django_settings
+        connect_base = (getattr(django_settings, 'PUBLIC_SITE_URL', None) or 'https://streetlabsafrica.org').rstrip('/')
+        connect_qr, _ = QRCode.objects.update_or_create(
+            code='SLAORG',
+            defaults={
+                'owner': admin_user,
+                'title': 'Street Labs Connect',
+                'description': 'Welcome hub — socials, website, and contact.',
+                'destination_type': QRCode.DestinationType.CUSTOM,
+                'destination_url': f'{connect_base}/connect',
+                'slug': 'slaorg',
+                'theme': QRCode.Theme.BRAND,
+                'is_active': True,
+            },
+        )
+        connect_qr.links.all().delete()
+
         self.stdout.write(self.style.SUCCESS('Seed complete.'))
         self.stdout.write('Login: admin / admin123!  |  Employee: hamood / hamood123!')
         self.stdout.write('Demo QR: /qr/A91KXT')
+        self.stdout.write(f'Connect QR: /qr/SLAORG → {connect_base}/connect')
