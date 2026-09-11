@@ -9,7 +9,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-only-change-me')
 DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
-    default='localhost,127.0.0.1,api.streetlabsafrica.org',
+    default='localhost,127.0.0.1,api.streetlabsafrica.org,*.ngrok-free.app',
     cast=Csv(),
 )
 
@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     # Local
     'accounts',
     'cms',
+    'events',
     'profiles',
     'qr',
     'analytics',
@@ -130,7 +131,7 @@ CORS_ALLOWED_ORIGINS = tuple(
     dict.fromkeys(
         (*config(
             'CORS_ALLOWED_ORIGINS',
-            default='http://localhost:5173,http://127.0.0.1:5173',
+            default='http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174',
             cast=Csv(),
         ), 'https://streetlabsafrica.org', 'https://www.streetlabsafrica.org')
     )
@@ -184,6 +185,10 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@streetlabsafr
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 # Optional extra inbox for contact/meeting alerts (comma-separated). Falls back to SiteSettings.email.
 CONTACT_NOTIFY_EMAIL = config('CONTACT_NOTIFY_EMAIL', default='')
+
+# Pay-IT webhook signing secret and replay tolerance
+PAYIT_SECRET_KEY = config('PAYIT_SECRET_KEY', default='')
+PAYIT_WEBHOOK_TOLERANCE_SECONDS = config('PAYIT_WEBHOOK_TOLERANCE_SECONDS', default=300, cast=int)
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Street Labs Africa Backend API',

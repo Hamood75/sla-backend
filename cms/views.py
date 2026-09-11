@@ -1,5 +1,14 @@
-from django.http import FileResponse, Http404
+import hashlib
+import hmac
+import json
+import time
+from decimal import Decimal
+
+from django.conf import settings
+from django.db.models import Q, Count as models_Count
+from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -15,6 +24,7 @@ from .models import (
     ContactMessage,
     DonateModalCopy,
     Donation,
+    DonationConfirmation,
     DonationTier,
     Event,
     GalleryImage,
@@ -40,7 +50,9 @@ from .serializers import (
     ContactMessageReplySerializer,
     ContactMessageSerializer,
     DonateModalCopySerializer,
+    DonationConfirmationSerializer,
     DonationSerializer,
+    DonationStatsSerializer,
     DonationTierSerializer,
     EventSerializer,
     GalleryImageSerializer,
@@ -341,26 +353,165 @@ class DonateModalCopyView(APIView):
         return Response(serializer.data)
 
 
-class DonationViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin,
+class DonationViewSet(mixins.ListModelMixin,
+                      mixins.RetrieveModelMixin,
+                      mixins.UpdateModelMixin,
+                      mixins.DestroyModelMixin,
                       viewsets.GenericViewSet):
     queryset = Donation.objects.select_related('payment_method')
     serializer_class = DonationSerializer
+    permission_classes = [IsBackofficeUser]
+    filterset_fields = ['status', 'confirmed', 'currency', 'donation_type']
+    search_fields = ['donor_name', 'donor_email', 'transaction_reference', 'payment_id']
+    ordering_fields = ['created_at', 'amount']
 
-    def get_permissions(self):
-        if self.action == 'create':
-            return [permissions.AllowAny()]
-        return [IsBackofficeUser()]
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        ref = f"SLA-{int(timezone.now().timestamp())}"
-        donation = serializer.save(
-            status=Donation.Status.SUCCESS,
-            transaction_reference=ref,
-            external_reference=ref,
+class DonationConfirmationViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = DonationConfirmation.objects.select_related('donation')
+    serializer_class = DonationConfirmationSerializer
+    permission_classes = [IsBackofficeUser]
+    filterset_fields = ['event_type', 'duplicate', 'processed', 'donation']
+    search_fields = ['event_id']
+    ordering_fields = ['created_at', 'received_at']
+
+
+class DonationWebhookView(APIView):
+    """Receive Pay-IT webhook events, verify signature, confirm/create donations."""
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def post(self, request, *args, **kwargs):
+        secret = settings.PAYIT_SECRET_KEY
+        if not secret:
+            return HttpResponse('Webhook secret not configured', status=500)
+
+        signature = request.headers.get('PayIT-Signature', '')
+        timestamp = request.headers.get('PayIT-Timestamp', '')
+        header_event_id = request.headers.get('PayIT-Event-Id', '')
+
+        if not signature or not timestamp or not header_event_id:
+            return HttpResponse('Missing required Pay-IT headers', status=400)
+
+        # Replay tolerance check
+        try:
+            ts_int = int(timestamp)
+        except (ValueError, TypeError):
+            return HttpResponse('Invalid timestamp', status=400)
+
+        tolerance = settings.PAYIT_WEBHOOK_TOLERANCE_SECONDS
+        if abs(time.time() - ts_int) > tolerance:
+            return HttpResponse('Timestamp outside tolerance window', status=401)
+
+        # Read raw body for signature verification
+        raw_body = request.body
+        if not raw_body:
+            return HttpResponse('Empty body', status=400)
+
+        # Compute expected signature: v1=HMAC-SHA256(secret, timestamp + "." + raw_body)
+        signed_payload = f'{timestamp}.'.encode() + raw_body
+        expected_sig = 'v1=' + hmac.new(
+            secret.encode(), signed_payload, hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(signature, expected_sig):
+            return HttpResponse('Invalid signature', status=401)
+
+        # Parse the verified body
+        try:
+            event = json.loads(raw_body)
+        except (json.JSONDecodeError, ValueError):
+            return HttpResponse('Invalid JSON', status=400)
+
+        # Confirm header event ID matches body id
+        body_event_id = event.get('id', '')
+        if body_event_id != header_event_id:
+            return HttpResponse('Event ID mismatch', status=400)
+
+        result = self._process_event(event)
+        return Response({'processed': 1, 'results': [result]}, status=status.HTTP_200_OK)
+
+    def _process_event(self, event):
+        event_id = event.get('id', '')
+        event_type = event.get('type', '')
+        created_at = event.get('created_at', '')
+        data = event.get('data', {}) or {}
+
+        if not event_id:
+            return {'error': 'event id is required', 'processed': False}
+
+        confirmation, created = DonationConfirmation.objects.get_or_create(
+            event_id=str(event_id),
+            defaults={
+                'event_type': str(event_type),
+                'received_at': parse_datetime(created_at) if created_at else None,
+                'timestamp': str(event.get('api_version', '')),
+                'duplicate': False,
+                'payload': event,
+            },
         )
-        return Response(DonationSerializer(donation).data, status=status.HTTP_201_CREATED)
+
+        if not created:
+            return {'event_id': str(event_id), 'status': 'already recorded', 'processed': False}
+
+        payment_id = data.get('payment_id', '')
+        payment_link_id = data.get('payment_link_id', '')
+        amount = data.get('amount')
+        currency = data.get('currency', 'TZS')
+        channel = data.get('initiation_channel', '')
+        status_value = data.get('status', '')
+        donor_name = data.get('donor_name', '') or data.get('customer_name', '')
+        donor_email = data.get('donor_email', '') or data.get('customer_email', '')
+        new_status = Donation.Status.PENDING
+        confirmed = False
+        if event_type.endswith('.succeeded') or status_value == 'succeeded':
+            new_status = Donation.Status.SUCCESS
+            confirmed = True
+        elif event_type.endswith('.failed') or status_value == 'failed':
+            new_status = Donation.Status.FAILED
+        elif event_type.endswith('.expired') or status_value == 'expired':
+            new_status = Donation.Status.FAILED
+
+        defaults = {
+            'amount': Decimal(amount) if amount is not None else Decimal('0.00'),
+            'currency': currency,
+            'payment_link_id': payment_link_id,
+            'initiation_channel': channel,
+            'status': new_status,
+            'confirmed': confirmed,
+            'raw_gateway_response': event,
+        }
+        defaults['donor_name'] = donor_name if donor_name else 'Anonymous'
+        if donor_email:
+            defaults['donor_email'] = donor_email
+
+        if payment_id:
+            defaults['payment_id'] = payment_id
+            defaults['external_reference'] = payment_id
+
+        donation = None
+        if payment_id:
+            donation = Donation.objects.filter(payment_id=payment_id).first()
+
+        if donation:
+            for key, value in defaults.items():
+                setattr(donation, key, value)
+            donation.save(update_fields=list(defaults.keys()) + ['updated_at'])
+        else:
+            if payment_id:
+                defaults['transaction_reference'] = payment_id
+            donation = Donation.objects.create(**defaults)
+
+        confirmation.donation = donation
+        confirmation.processed = True
+        confirmation.save(update_fields=['donation', 'processed'])
+
+        return {
+            'event_id': str(event_id),
+            'donation_id': donation.pk,
+            'status': donation.status,
+            'confirmed': donation.confirmed,
+        }
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -415,6 +566,35 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.action in ('list', 'retrieve') and not getattr(self.request.user, 'is_backoffice_user', False):
             return qs.filter(is_published=True)
         return qs
+
+
+class DonationStatsAPIView(APIView):
+    permission_classes = [IsBackofficeUser]
+
+    def get(self, request):
+        from django.db.models import Sum
+
+        qs = Donation.objects.all()
+        confirmed_qs = qs.filter(confirmed=True)
+
+        data = {
+            'total_donations': qs.count(),
+            'successful': qs.filter(status=Donation.Status.SUCCESS).count(),
+            'pending': qs.filter(status=Donation.Status.PENDING).count(),
+            'failed': qs.filter(status=Donation.Status.FAILED).count(),
+            'confirmed_total': confirmed_qs.aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00'),
+            'confirmed_count': confirmed_qs.count(),
+            'confirmed_by_currency': list(
+                confirmed_qs.values('currency').annotate(
+                    total=Sum('amount'),
+                    count=models_Count('id'),
+                ).order_by('-total')
+            ),
+        }
+        serializer = DonationStatsSerializer(data)
+        return Response(serializer.data)
 
 
 class DashboardStatsAPIView(APIView):
