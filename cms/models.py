@@ -558,3 +558,31 @@ class Product(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+
+class Post(TimeStampedModel):
+    class Type(models.TextChoices):
+        BLOG = 'blog', 'Blog Post'
+        PODCAST = 'podcast', 'Podcast'
+
+    post_type = models.CharField(max_length=20, choices=Type.choices, default=Type.BLOG)
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True)
+    excerpt = models.TextField(blank=True)
+    body = models.TextField(blank=True)
+    cover_image = models.ImageField(upload_to='cms/posts/', blank=True, null=True)
+    episode_number = models.PositiveIntegerField(null=True, blank=True)
+    scheduled_at = models.DateTimeField(null=True, blank=True,
+        help_text='For podcasts: when the live session happens')
+    live_join_url = models.URLField(blank=True,
+        help_text='For podcasts: link to join the live session (e.g. Google Meet, YouTube Live)')
+    recording_url = models.URLField(blank=True,
+        help_text='For podcasts: link to the recorded episode (e.g. Spotify, YouTube)')
+    is_published = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order', '-scheduled_at', '-created_at']
+
+    def __str__(self):
+        return f'[{self.get_post_type_display()}] {self.title}'

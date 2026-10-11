@@ -20,6 +20,7 @@ from .models import (
     NewsletterSubscriber,
     OrgChartNode,
     PaymentMethod,
+    Post,
     Product,
     Program,
     Project,
@@ -78,6 +79,7 @@ admin.site.register(DonateModalCopy)
 admin.site.register(Donation)
 admin.site.register(Project)
 admin.site.register(Event)
+admin.site.register(Post)
 admin.site.register(Product)
 admin.site.register(GalleryImage)
 

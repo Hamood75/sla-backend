@@ -36,6 +36,7 @@ from .models import (
     NewsletterSubscriber,
     OrgChartNode,
     PaymentMethod,
+    Post,
     Product,
     Program,
     Project,
@@ -64,6 +65,7 @@ from .serializers import (
     NavItemSerializer,
     NewsletterSubscriberSerializer,
     OrgChartNodeSerializer,
+    PostSerializer,
     PaymentMethodSerializer,
     ProductSerializer,
     ProgramSerializer,
@@ -566,6 +568,25 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.action in ('list', 'retrieve') and not getattr(self.request.user, 'is_backoffice_user', False):
             return qs.filter(is_published=True)
         return qs
+
+
+class PostViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = PostSerializer
+    permission_classes = [permissions.AllowAny]
+    lookup_field = 'slug'
+    search_fields = ['title', 'slug', 'excerpt']
+    filterset_fields = ['post_type']
+
+    def get_queryset(self):
+        return Post.objects.filter(is_published=True)
+
+
+class BackofficePostViewSet(BackofficeModelViewSet):
+    queryset = Post.objects.all()
+    serializer_class = PostSerializer
+    lookup_field = 'slug'
+    search_fields = ['title', 'slug', 'excerpt']
+    filterset_fields = ['post_type', 'is_published']
 
 
 class DonationStatsAPIView(APIView):

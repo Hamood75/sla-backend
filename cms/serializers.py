@@ -21,6 +21,7 @@ from .models import (
     NewsletterSubscriber,
     OrgChartNode,
     PaymentMethod,
+    Post,
     Product,
     Program,
     Project,
@@ -275,6 +276,12 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class PostSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Post
+        fields = '__all__'
+
+
 class HomepageSerializer(serializers.Serializer):
     settings = SiteSettingsSerializer()
     announcement = AnnouncementBarSerializer(allow_null=True)
@@ -304,4 +311,5 @@ class DonationStatsSerializer(serializers.Serializer):
     failed = serializers.IntegerField()
     confirmed_total = serializers.DecimalField(max_digits=12, decimal_places=2)
     confirmed_count = serializers.IntegerField()
+    confirmed_by_currency = DonationCurrencyBreakdownSerializer(many=True)
     confirmed_by_currency = DonationCurrencyBreakdownSerializer(many=True)

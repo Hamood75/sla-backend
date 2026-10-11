@@ -10,6 +10,7 @@ from accounts.views import DepartmentViewSet, MeView, OrganizationViewSet, Regis
 from cms.views import (
     AboutSectionViewSet,
     AnnouncementBarViewSet,
+    BackofficePostViewSet,
     BrandValueViewSet,
     ContactMessageViewSet,
     DashboardStatsAPIView,
@@ -31,6 +32,7 @@ from cms.views import (
     NewsletterSubscriberViewSet,
     OrgChartNodeViewSet,
     PaymentMethodViewSet,
+    PostViewSet,
     ProductViewSet,
     ProgramViewSet,
     ProjectViewSet,
@@ -66,6 +68,8 @@ router.register(r'donations', DonationViewSet, basename='donations')
 router.register(r'donation-confirmations', DonationConfirmationViewSet, basename='donation-confirmations')
 router.register(r'projects', ProjectViewSet, basename='projects')
 router.register(r'events', EventViewSet, basename='events')
+router.register(r'posts', PostViewSet, basename='posts')
+router.register(r'admin/posts', BackofficePostViewSet, basename='admin-posts')
 router.register(r'products', ProductViewSet, basename='products')
 router.register(r'profiles', EmployeeProfileViewSet, basename='profiles')
 router.register(r'qr', QRCodeViewSet, basename='qr')
